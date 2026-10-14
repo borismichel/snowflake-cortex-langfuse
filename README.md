@@ -5,6 +5,8 @@ Export Cortex Agent traces to Langfuse, including runs made in Snowflake’s bro
 > **Custom community project. Not an officially supported Langfuse component.**
 > Built and maintained by Boris Michel. This project is not an official Snowflake integration and carries no vendor support commitment.
 
+> **Experimental software — use at your own risk.** Provided as is, without warranty. The MIT licence includes an exclusion of author and copyright-holder liability, subject to applicable law. Review the [disclaimer and user responsibilities](#disclaimer-and-user-responsibilities) before installing.
+
 ![Snowflake Cortex browser run connected to its Langfuse trace](docs/assets/cortex-langfuse.png)
 
 [Install](docs/INSTALL.md) · [Configure agent/project mapping](sql/03a_destination_and_routes.sql) · [Operate and recover](docs/OPERATIONS.md) · [Validation status](docs/STATUS.md)
@@ -111,6 +113,14 @@ python3 -m unittest discover -s tests -v
 Python 3.11 is used in CI. These tests check the embedded Python handlers and routing decisions with mocks; they do not replace Snowflake integration tests. The most useful contributions now are a documented fresh-account install, live multi-project canaries and failure-path validation.
 
 Questions and reproducible bugs belong in this repository’s issues. There is no support SLA; please do not treat Langfuse or Snowflake support as the maintainer of this custom exporter.
+
+## Disclaimer and user responsibilities
+
+**Use this software at your own risk.** The [MIT licence](LICENSE) provides the software as is, disclaims warranties and excludes liability of the authors and copyright holders for claims, damages or other liability arising from its use, to the extent permitted by applicable law. This notice explains those terms; it does not replace or modify the licence. Nothing here excludes liability that applicable law does not allow to be excluded.
+
+This is an experimental community project. There is no guarantee of production suitability, security, accuracy, complete trace delivery, availability or compatibility with future Snowflake or Langfuse versions. There is no support SLA or commitment to ongoing maintenance, updates or fixes, and no official support or endorsement by Langfuse or Snowflake.
+
+You are responsible for reviewing and testing the code, deciding whether it is appropriate for your environment, controlling access and credentials, authorising any data sent to Langfuse, monitoring infrastructure and service charges, and maintaining backups and recovery procedures. Test in a disposable environment before considering production use. See the [known limitations](docs/LIMITATIONS.md) and [validation status](docs/STATUS.md).
 
 ## Licence and attribution
 

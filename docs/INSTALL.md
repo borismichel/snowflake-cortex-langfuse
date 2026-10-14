@@ -1,5 +1,7 @@
 # Installation and upgrade
 
+> **Use at your own risk.** This experimental software is provided as is, without warranty, under the [MIT licence](../LICENSE). Read the [disclaimer and user responsibilities](../README.md#disclaimer-and-user-responsibilities) before running any script. You are responsible for testing, permissions, exported data and service charges.
+
 This is a custom community project, not an officially supported Langfuse component.
 All executable files are under `sql/`. The original V1 was demonstrated in Snowflake;
 this snapshot adds routing safeguards validated offline. Snowflake compilation, live
