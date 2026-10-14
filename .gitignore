@@ -1,0 +1,14 @@
+# Local credentials and machine-specific files
+.DS_Store
+.env
+.env.*
+!.env.example
+Secrets.sql
+secrets.sql
+**/Secrets.sql
+**/secrets.sql
+*.pem
+*.key
+__pycache__/
+*.py[cod]
+.venv/

@@ -1,0 +1,10 @@
+-- Additive migration. Run after 02b, before installing the new 04.
+USE ROLE LANGFUSE_EXPORTER_ROLE;
+USE WAREHOUSE LANGFUSE_EXPORTER_WH;
+USE SCHEMA LANGFUSE_EXPORTER.CORE;
+ALTER TABLE TRACES ADD COLUMN IF NOT EXISTS route_error VARCHAR;
+ALTER TABLE TRACES ADD COLUMN IF NOT EXISTS route_candidates ARRAY;
+ALTER TABLE TRACES ADD COLUMN IF NOT EXISTS frozen_route_config OBJECT;
+INSERT INTO SCHEMA_VERSION (version, description)
+SELECT 3, 'fail-closed routing diagnostics and frozen route configuration'
+WHERE NOT EXISTS (SELECT 1 FROM SCHEMA_VERSION WHERE version = 3);
