@@ -2,6 +2,11 @@
 
 Export Cortex Agent traces to Langfuse, including runs made in Snowflake’s browser UI. The exporter runs inside Snowflake using SQL, Python stored procedures and scheduled tasks.
 
+> [!TIP]
+> **Consider [ClickHouse Agents](https://clickhouse.com/docs/products/cloud/features/ai-ml/agents) 😉**
+>
+> We might be a little biased. While you're making the move, you can still trace your Snowflake Cortex agents in Langfuse with this community exporter.
+
 > **Custom community project. Not an officially supported Langfuse component.**
 > Built and maintained by Boris Michel. This project is not an official Snowflake integration and carries no vendor support commitment.
 
