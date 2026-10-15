@@ -1,10 +1,10 @@
-# Installation and upgrade
+# Installation and upgrade · v1.2
 
 > **Use at your own risk.** This experimental software is provided as is, without warranty, under the [MIT licence](../LICENSE). Read the [disclaimer and user responsibilities](../README.md#disclaimer-and-user-responsibilities) before running any script. You are responsible for testing, permissions, exported data and service charges.
 
 This is a custom community project, not an officially supported Langfuse component.
-All executable files are under `sql/`. The original V1 was demonstrated in Snowflake;
-this snapshot adds routing safeguards validated offline. Snowflake compilation, live
+All Snowflake installation scripts are under `sql/`; the optional package builder is under `tools/`. The original V1 was demonstrated in Snowflake;
+v1.2 adds routing safeguards and bounded multi-trace batching validated offline. Snowflake compilation, live
 multi-project canaries and a fresh-account manual replay are still required.
 
 ## Choose the mapping
@@ -62,11 +62,11 @@ its returned project ID with the configured project. Do this before staging/publ
 
 ## New installation
 
-Run candidate files sequentially, inspect each result, and keep the task schedule
+Run v1.2 files sequentially, inspect each result, and keep the task schedule
 suspended until the canary checks below pass:
 
 1. `01_role_warehouse_database.sql`, `02_core_tables.sql`, `02b_migration_v2.sql`,
-   then `02c_routing_safety.sql`. The candidate 02b no longer seeds a test project ID.
+   then `02c_routing_safety.sql`, then `02d_migration_v12.sql`. The candidate 02b no longer seeds a test project ID.
 2. Create each secret privately; configure integration/bindings in
    `03_network_secret_integration.sql` and run it.
 3. Apply your edited `03a_destination_and_routes.sql`; verify connectivity/project
@@ -82,7 +82,24 @@ suspended until the canary checks below pass:
    Follow [task activation](OPERATIONS.md#scheduled-publication), child before root.
    Never include 99_uninstall.sql in an installation batch.
 
-## Upgrade the existing V1 account
+## Upgrade an existing exporter to v1.2
+
+For an account already on the public routing-safety snapshot: suspend the root task,
+wait for the active graph/manual publisher to finish, and capture current procedure DDL
+and configuration. Apply **02d**, replace **05b**, and reinstall **07** only if you need
+its new monitoring views: extract Part C's views rather than replacing the existing task graph.
+Keep the current task definitions and destination secret bindings. The existing scheduled
+wrapper is replaced by 05b and now uses configured limits. Run the batching canaries in
+[SCALING.md](SCALING.md) before resuming. Existing per-trace deliveries remain valid;
+accepted spans are not re-enqueued. Tune per-destination limits before enabling scheduling.
+
+To roll back code, suspend/drain first and inspect IN_FLIGHT/PARTIAL/UNCERTAIN members;
+retain HTTP_BATCHES, DELIVERIES and attempts. Restore captured old 05b definitions only
+after that review. The additive columns/table can remain. Never delete delivery records
+to roll back. Old code sends pending per-trace rows individually and is not batch-aware
+in its transport audit; do not claim an untested rollback is verified.
+
+## Upgrade the original V1 account
 
 Save your current procedure DDL and destination/route rows first. These local files
 are the supplied baseline, not proof of current live DDL. Preserve all existing secret
@@ -104,7 +121,7 @@ WHERE DATABASE_NAME = 'LANGFUSE_EXPORTER' AND SCHEMA_NAME = 'CORE'
 ORDER BY SCHEDULED_TIME DESC;
 ```
 
-Apply only 02c, your edited 03a (after any new credentials/bindings are prepared),
+Apply 02c and 02d, your edited 03a (after any new credentials/bindings are prepared),
 then 04, 05b, 05c, 05d. Do not re-run 01/02/02b seeds or recreate the task graph as an
 upgrade shortcut. Do not reset routing or delivery state. Inspect queued work and
 perform fresh canaries before explicitly resuming the existing task graph.
@@ -171,6 +188,13 @@ SCORES, DELIVERIES or TRACES. The additive 02c columns may remain. The original 
 99 uninstall drops the database, including the new view/columns; it is not a rollback.
 
 ## Optional AI-assisted path
+
+Use the [versioned CoCo interview](../deploy/coco/00_START_HERE.md). Build its upload
+package with `python3 tools/build_coco_package.py --output /tmp/coco-v1.2` from a clean
+checkout; the package pins HEAD and contains the same scripts. Agents must interview
+for volume/window length and limits as well as routes, credentials and cadence.
+They must not assume this version supports 80k/window or that a canary proves capacity.
+
 
 Give the Snowflake AI agent these same candidate files and the edited 03a mapping.
 Ask it to follow this sequence, preserve bindings and existing accepted data, inspect

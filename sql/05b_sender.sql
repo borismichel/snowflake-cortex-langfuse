@@ -1,12 +1,12 @@
 /* =============================================================================
    05b_sender.sql
    Langfuse exporter - step 05b: sender, delivery state machine, credit scores,
-   reconciliation, manual replay. Requires steps 02b, 03, 04, 05a.
+   reconciliation, manual replay. v1.2 requires steps 02b/02c/02d, 03, 04, 05a.
 
    RUN AS LANGFUSE_EXPORTER_ROLE (owns LANGFUSE_CLOUD_EAI usage and the secret).
 
    CREATES (schema-level, LANGFUSE_EXPORTER.CORE)
-     PROCEDURE PUBLISH_DESTINATION(DESTINATION_ID, MAX_ITEMS, DRY_RUN)
+     PROCEDURE PUBLISH_DESTINATION(DESTINATION_ID, MAX_ITEMS, DRY_RUN, ONLY_TRACE_ID)
      PROCEDURE RECONCILE_DELIVERIES(DESTINATION_ID, MAX_ITEMS)
      PROCEDURE MARK_FOR_REPLAY(DELIVERY_ID, REASON)        -- explicit human decision
      PROCEDURE PUBLISH_ALL_DESTINATIONS()                 -- used by PUBLISH_TASK (07)
@@ -20,6 +20,11 @@
               traceId + observationId = actual root span.
      Readback: GET {host}/api/public/v2/observations?traceId=...&fields=core,basic
      Project : GET {host}/api/public/projects must list the destination project_id.
+
+   v1.2: TRACE_BATCH delivery rows still represent ONE trace. Multiple rows share
+   one bounded OTLP request, persisted in HTTP_BATCHES before POST. Default request
+   caps are 100 traces / 1000 spans / 1 MB; configured dispatch budgets replace the
+   former scheduled limit of 20. Scores have an independent budget. See SCALING.md.
 
    DELIVERY STATE MACHINE (per destination; one row per item)
      PENDING -> IN_FLIGHT (conditional UPDATE = serialized claim; attempt row is
@@ -81,6 +86,7 @@ CREATE OR REPLACE PROCEDURE LANGFUSE_EXPORTER.CORE.PUBLISH_DESTINATION(
 AS
 $$
 import hashlib
+import time
 import json
 import re
 import uuid
@@ -126,16 +132,23 @@ def pause(session, destination_id, reason):
 def enqueue(session, dest, host, project_id, account, item_type, item_key, trace_id, payload, event_keys):
     did = delivery_id(account, host, project_id, item_type, item_key)
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    q(session,
-      f"INSERT INTO {DB}.DELIVERIES (delivery_id, destination_id, item_type, item_key, trace_id, "
-      f"payload_hash, status, source_account, host, project_id, payload) "
-      f"SELECT ?, ?, ?, ?, ?, SHA2(?), 'PENDING', ?, ?, ?, PARSE_JSON(?) "
-      f"WHERE NOT EXISTS (SELECT 1 FROM {DB}.DELIVERIES WHERE delivery_id = ?)",
-      [did, dest, item_type, item_key, trace_id, body, account, host, project_id, body, did])
-    for ek in event_keys:
-        q(session, f"INSERT INTO {DB}.DELIVERY_ITEMS (delivery_id, event_key) SELECT ?, ? "
-                   f"WHERE NOT EXISTS (SELECT 1 FROM {DB}.DELIVERY_ITEMS WHERE delivery_id = ? AND event_key = ?)",
-          [did, ek, did, ek])
+    q(session, 'BEGIN TRANSACTION')
+    try:
+        q(session,
+          f"INSERT INTO {DB}.DELIVERIES (delivery_id, destination_id, item_type, item_key, trace_id, "
+          f"payload_hash, status, source_account, host, project_id, payload) "
+          f"SELECT ?, ?, ?, ?, ?, SHA2(?), 'PENDING', ?, ?, ?, PARSE_JSON(?) "
+          f"WHERE NOT EXISTS (SELECT 1 FROM {DB}.DELIVERIES WHERE delivery_id = ?)",
+          [did, dest, item_type, item_key, trace_id, body, account, host, project_id, body, did])
+        if event_keys:
+            q(session, f"INSERT INTO {DB}.DELIVERY_ITEMS (delivery_id,event_key) "
+                       "SELECT ?,f.value::STRING FROM TABLE(FLATTEN(INPUT=>PARSE_JSON(?))) f "
+                       f"WHERE NOT EXISTS (SELECT 1 FROM {DB}.DELIVERY_ITEMS i WHERE i.delivery_id=? AND i.event_key=f.value::STRING)",
+                       [did,json.dumps(event_keys),did])
+        q(session, 'COMMIT')
+    except Exception:
+        q(session, 'ROLLBACK')
+        raise
     return did
 
 
@@ -146,14 +159,22 @@ def classify_response(item_type, r):
         if item_type != "TRACE_BATCH":
             return "ACCEPTED", None
         try:
-            ps = (r.json() or {}).get("partialSuccess") or {}
-        except ValueError:
-            ps = {}
-        rejected = int(ps.get("rejectedSpans") or 0)
+            ack = r.json()
+            if not isinstance(ack, dict):
+                return "UNCERTAIN", "invalid OTLP acknowledgement"
+            ps = ack.get("partialSuccess") or {}
+        except (ValueError, TypeError, AttributeError):
+            return "UNCERTAIN", "invalid OTLP acknowledgement"
+        try:
+            rejected = int(ps.get("rejectedSpans") or 0)
+        except (ValueError, TypeError, AttributeError):
+            return "UNCERTAIN", "invalid OTLP partialSuccess"
+        if rejected < 0:
+            return "UNCERTAIN", "invalid rejectedSpans"
         if rejected > 0:
             return "PARTIAL", f"rejectedSpans={rejected}"
         # A partialSuccess warning with zero rejections is not a rejection.
-        return "ACCEPTED", ("warning: " + ps["errorMessage"][:500]) if ps.get("errorMessage") else None
+        return "ACCEPTED", ("warning: " + str(ps["errorMessage"])[:500]) if ps.get("errorMessage") else None
     if code in (401, 403):
         return "REJECTED", "authentication"
     if code in RETRYABLE_HTTP:
@@ -163,7 +184,7 @@ def classify_response(item_type, r):
     return "UNCERTAIN", "server error after send"
 
 
-def send_one(session, dest, host, project_id, auth, max_attempts, d_id):
+def send_one(session, dest, host, project_id, auth, max_attempts, d_id, http=None):
     # Check again at the actual send boundary, including already-queued work.
     frozen = q(session, f"SELECT destination_id, host, project_id FROM {DB}.DELIVERIES "
                        f"WHERE delivery_id = ?", [d_id])
@@ -193,7 +214,7 @@ def send_one(session, dest, host, project_id, auth, max_attempts, d_id):
 
     http = excerpt = err_class = note = None
     try:
-        r = requests.post(url, data=body.encode("utf-8"), headers=headers, auth=auth,
+        r = (http or requests).post(url, data=body.encode("utf-8"), headers=headers, auth=auth,
                           timeout=TIMEOUT, allow_redirects=False)
         http, excerpt = r.status_code, redact(r.text)[:2000]
         outcome, note = classify_response(item_type, r)
@@ -222,8 +243,153 @@ def send_one(session, dest, host, project_id, auth, max_attempts, d_id):
     return {"delivery_id": d_id, "item_type": item_type, "outcome": outcome, "http": http, "note": last_error}
 
 
+# v1.2: per-trace frozen deliveries, bounded multi-trace HTTP envelopes.
+DEFAULT_LIMITS = (1000, 100, 1000, 1000000, 20, 100, 300)
+LIMIT_NAMES = ('max_traces_per_run', 'max_traces_per_request', 'max_spans_per_request',
+               'max_request_bytes', 'max_trace_requests_per_run', 'max_scores_per_run', 'max_run_seconds')
+
+
+def limits_from(row):
+    limits = dict(zip(LIMIT_NAMES, [int(x) for x in row]))
+    bounds = ((1, 10000), (1, 1000), (1, 100000), (1024, 4000000), (1, 1000), (1, 10000), (10, 3600))
+    if len(row) != len(bounds) or any(not lo <= limits[k] <= hi for k, (lo, hi) in zip(LIMIT_NAMES, bounds)):
+        raise ValueError('invalid publisher limits')
+    return limits
+
+
+def encoded(payload):
+    return json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+
+
+def trace_shape(payload):
+    resources = payload.get('resourceSpans')
+    if not isinstance(resources, list) or not resources:
+        raise ValueError('empty resourceSpans')
+    spans = [s for r in resources for scope in r.get('scopeSpans', []) for s in scope.get('spans', [])]
+    if not spans or any(not s.get('traceId') or not s.get('spanId') for s in spans):
+        raise ValueError('empty or invalid spans')
+    if len({s['traceId'] for s in spans}) != 1:
+        raise ValueError('delivery must contain one trace')
+    return len(spans)
+
+
+def pack_traces(items, limits):
+    """Whole traces only. Byte limits include the final UTF-8 JSON envelope."""
+    batches, rejected, group, resources, n_spans = [], [], [], [], 0
+    for item in items:
+        try:
+            count = trace_shape(item['payload'])
+        except (ValueError, TypeError, KeyError) as exc:
+            rejected.append((item['delivery_id'], 'INVALID_PAYLOAD: ' + str(exc)))
+            continue
+        rs = item['payload']['resourceSpans']
+        if count > limits['max_spans_per_request'] or len(encoded({'resourceSpans': rs})) > limits['max_request_bytes']:
+            rejected.append((item['delivery_id'], 'OVERSIZED_TRACE: adjust limits or review payload; no POST'))
+            continue
+        candidate = {'resourceSpans': resources + rs}
+        if group and (len(group) >= limits['max_traces_per_request'] or
+                      n_spans + count > limits['max_spans_per_request'] or
+                      len(encoded(candidate)) > limits['max_request_bytes']):
+            batches.append((group, encoded({'resourceSpans': resources})))
+            group, resources, n_spans = [], [], 0
+        group.append(item)
+        resources.extend(rs)
+        n_spans += count
+    if group:
+        batches.append((group, encoded({'resourceSpans': resources})))
+    return batches, rejected
+
+
+def send_trace_batch(session, dest, host, project_id, auth, max_attempts, items, wire, http):
+    ids = [x['delivery_id'] for x in items]
+    if not ids or len(set(ids)) != len(ids):
+        return {'outcome': 'HELD_IDENTITY_MISMATCH', 'http': None}
+    if wire != encoded({'resourceSpans': [r for x in items for r in x['payload']['resourceSpans']]}):
+        return {'outcome': 'HELD_PAYLOAD_MISMATCH', 'http': None}
+    ids_json = json.dumps(ids)
+    selector = 'SELECT value::STRING FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?)))'
+    frozen = q(session, f'SELECT delivery_id, destination_id, host, project_id, TO_JSON(payload) '
+               f'FROM {DB}.DELIVERIES WHERE delivery_id IN ({selector})', [ids_json])
+    expected = {x['delivery_id']: x['payload'] for x in items}
+    if len(frozen) != len(ids) or len({r[0] for r in frozen}) != len(ids) or any(
+            r[0] not in expected or r[1] != dest or not r[2] or r[2].rstrip('/') != host or
+            r[3] != project_id or json.loads(r[4]) != expected[r[0]] for r in frozen):
+        return {'outcome': 'HELD_IDENTITY_MISMATCH', 'http': None}
+    # Persist exact HTTP body and claim ALL members atomically before external I/O.
+    batch_id = str(uuid.uuid4())
+    q(session, 'BEGIN TRANSACTION')
+    try:
+        upd = q(session, f"UPDATE {DB}.DELIVERIES SET status='IN_FLIGHT', claim_id=?, claimed_at=CURRENT_TIMESTAMP(), "
+                f"attempt_count=attempt_count+1, updated_at=CURRENT_TIMESTAMP() WHERE delivery_id IN ({selector}) "
+                f"AND destination_id=? AND RTRIM(host,'/')=? AND project_id=? AND item_type='TRACE_BATCH' "
+                f"AND status IN ('PENDING','RETRYABLE') AND (next_attempt_at IS NULL OR next_attempt_at<=CURRENT_TIMESTAMP())",
+                [batch_id, ids_json, dest, host, project_id])
+        if not upd or int(upd[0][0]) != len(ids):
+            q(session, 'ROLLBACK')
+            return {'outcome': 'CLAIM_SKIPPED', 'http': None}
+        q(session, f"INSERT INTO {DB}.HTTP_BATCHES (batch_id,destination_id,host,project_id,delivery_ids,request_body,status) "
+                   'SELECT ?,?,?,?,PARSE_JSON(?),?,\'IN_FLIGHT\'', [batch_id,dest,host,project_id,ids_json,wire.decode('utf-8')])
+        q(session, f"INSERT INTO {DB}.DELIVERY_ATTEMPTS (attempt_id,delivery_id,started_at,state) "
+                   f"SELECT ?||':'||delivery_id,delivery_id,CURRENT_TIMESTAMP(),'STARTED' FROM {DB}.DELIVERIES WHERE claim_id=?",
+                   [batch_id,batch_id])
+        q(session, 'COMMIT')
+    except Exception:
+        q(session, 'ROLLBACK')
+        raise
+    code = excerpt = note = err_class = None
+    try:
+        r = http.post(host + OTLP_PATH, data=wire, headers={'Content-Type':'application/json','x-langfuse-ingestion-version':'4'},
+                      auth=auth, timeout=TIMEOUT, allow_redirects=False)
+        code, excerpt = r.status_code, redact(r.text)[:2000]
+        outcome, note = classify_response('TRACE_BATCH', r)
+    except requests.exceptions.ConnectTimeout as exc:
+        outcome, err_class = 'RETRYABLE', type(exc).__name__
+    except Exception as exc:
+        outcome, err_class = 'UNCERTAIN', type(exc).__name__
+    error = '; '.join(x for x in (note, err_class) if x) or None
+    # Persist outcome and per-trace state atomically. A crash leaves IN_FLIGHT -> UNCERTAIN.
+    q(session, 'BEGIN TRANSACTION')
+    try:
+        q(session, f"UPDATE {DB}.DELIVERY_ATTEMPTS SET finished_at=CURRENT_TIMESTAMP(),state='FINISHED',http_status=?,"
+                   "outcome=?,response_excerpt=?,error_class=? WHERE attempt_id LIKE ?",
+                   [code,outcome,excerpt,err_class,batch_id+':%'])
+        q(session, f"UPDATE {DB}.DELIVERIES SET status=IFF(?='RETRYABLE' AND attempt_count>=?,'REJECTED',?), "
+                   "last_http_status=?,last_error=?,next_attempt_at=IFF(?='RETRYABLE', "
+                   "DATEADD(minute,CASE WHEN attempt_count=1 THEN 1 WHEN attempt_count=2 THEN 5 "
+                   "WHEN attempt_count=3 THEN 15 WHEN attempt_count=4 THEN 60 ELSE 240 END,CURRENT_TIMESTAMP()),NULL), "
+                   "updated_at=CURRENT_TIMESTAMP() WHERE claim_id=? AND status='IN_FLIGHT'",
+                   [outcome,max_attempts,outcome,code,error,outcome,batch_id])
+        if outcome in ('ACCEPTED', 'PARTIAL'):
+            q(session, f"UPDATE {DB}.TRACES SET trace_status=?,updated_at=CURRENT_TIMESTAMP() WHERE trace_id IN "
+                       f"(SELECT trace_id FROM {DB}.DELIVERIES WHERE claim_id=?)",
+                       ['PUBLISHED' if outcome == 'ACCEPTED' else 'PARTIAL',batch_id])
+        q(session, f"UPDATE {DB}.HTTP_BATCHES SET status=?,http_status=?,finished_at=CURRENT_TIMESTAMP() WHERE batch_id=?",
+                   [outcome,code,batch_id])
+        q(session, 'COMMIT')
+    except Exception:
+        q(session, 'ROLLBACK')
+        raise
+    if code in (401,403):
+        pause(session,dest,f'authentication failed HTTP {code}')
+    return {'batch_id':batch_id,'traces':len(ids),'bytes':len(wire),'outcome':outcome,'http':code}
+
+
 def run(session, destination_id, max_items, dry_run, only_trace_id=None):
-    max_items = int(max_items or 20)
+    started = time.monotonic()
+    cfg = q(session, f"SELECT {', '.join(LIMIT_NAMES)} FROM {DB}.DESTINATIONS WHERE destination_id=?", [destination_id])
+    if len(cfg) != 1:
+        return {"ok": False, "error": "missing or duplicate v1.2 publisher configuration"}
+    try:
+        limits = limits_from(cfg[0])
+        max_items = min(int(max_items or limits['max_traces_per_run']), limits['max_traces_per_run'])
+        if max_items < 1:
+            raise ValueError('max_items must be positive')
+    except (ValueError, TypeError):
+        return {"ok": False, "error": "invalid v1.2 publisher limits"}
+    deadline = started + limits['max_run_seconds']
+    build_deadline = started + 0.4 * limits['max_run_seconds']
+    score_prepare_deadline = started + 0.6 * limits['max_run_seconds']
+    score_send_deadline = started + 0.75 * limits['max_run_seconds']
     d = q(session, f"SELECT langfuse_host, project_id, enabled, paused_reason, COALESCE(max_attempts, 5) "
                    f"FROM {DB}.DESTINATIONS WHERE destination_id = ?", [destination_id])
     if len(d) != 1:
@@ -283,8 +449,17 @@ def run(session, destination_id, max_items, dry_run, only_trace_id=None):
                    f"WHERE destination_id = ? AND status = 'IN_FLIGHT' "
                    f"AND claimed_at < DATEADD(minute, -{STALE_CLAIM_MIN}, CURRENT_TIMESTAMP())", [destination_id])
 
+    if not dry_run:
+        q(session, f"UPDATE {DB}.HTTP_BATCHES SET status='UNCERTAIN' WHERE destination_id=? "
+                   f"AND status='IN_FLIGHT' AND created_at<DATEADD(minute,-{STALE_CLAIM_MIN},CURRENT_TIMESTAMP())", [destination_id])
+
+    # Drain existing pending trace work before building another window of payloads.
+    existing_due = q(session, f"SELECT delivery_id FROM {DB}.DELIVERIES WHERE destination_id=? "
+                             f"AND item_type='TRACE_BATCH' AND status IN ('PENDING','RETRYABLE') {tf}"
+                             "AND (next_attempt_at IS NULL OR next_attempt_at<=CURRENT_TIMESTAMP()) LIMIT 1",
+                     [destination_id] + tp)
     # 3. Enqueue READY traces routed to exactly this host/project (frozen snapshot).
-    ready = q(session,
+    ready = [] if existing_due else q(session,
               f"SELECT t.trace_id FROM {DB}.TRACES t "
               f"WHERE t.destination_id = ? AND t.route_status = 'ROUTED' AND t.trace_status = 'READY' "
               f"AND RTRIM(t.frozen_host, '/') = ? AND t.frozen_project_id = ? "
@@ -295,6 +470,8 @@ def run(session, destination_id, max_items, dry_run, only_trace_id=None):
               [destination_id, host, project_id] + tp)
     queued, previews = [], []
     for (trace_id,) in ready:
+        if time.monotonic() >= build_deadline:
+            break
         built = session.call(f"{DB}.BUILD_TRACE_PAYLOAD", trace_id, True)
         built = json.loads(built) if isinstance(built, str) else built
         if not built.get("ok") or built.get("trace_status") != "READY":
@@ -316,12 +493,20 @@ def run(session, destination_id, max_items, dry_run, only_trace_id=None):
                    f"FROM {DB}.TRACES t JOIN {DB}.BILLING b ON b.request_id = t.request_id "
                    f"WHERE t.destination_id = ? AND t.trace_status = 'PUBLISHED' "
                    f"AND RTRIM(t.frozen_host, '/') = ? AND t.frozen_project_id = ? "
-                   f"{tf_t}",
+                   f"{tf_t} AND ((b.token_credits IS NOT NULL AND NOT EXISTS (SELECT 1 FROM {DB}.SCORES s "
+                   "WHERE s.destination_id=t.destination_id AND s.trace_id=t.trace_id AND s.name='snowflake.token_credits')) "
+                   f"OR (b.sql_query_credits IS NOT NULL AND NOT EXISTS (SELECT 1 FROM {DB}.SCORES s "
+                   "WHERE s.destination_id=t.destination_id AND s.trace_id=t.trace_id AND s.name='snowflake.sql_query_credits'))) "
+                   f"ORDER BY t.trace_end_utc LIMIT {limits['max_scores_per_run']}",
                    [destination_id, host, project_id] + tp)
     scores_new = 0
     for trace_id, root_id, request_id, ts, token_credits, sql_credits in score_rows:
+        if time.monotonic() >= score_prepare_deadline or scores_new >= limits["max_scores_per_run"]:
+            break
         values = {"token_credits": token_credits, "sql_query_credits": sql_credits}
         for name, col, comment in SCORE_COMPONENTS:
+            if scores_new >= limits['max_scores_per_run']:
+                break
             if values[col] is None:
                 continue                       # pending / not applicable: no score yet
             sid = str(uuid.uuid5(SCORE_NS, f"{host}|{project_id}|{trace_id}|{name}"))
@@ -345,9 +530,12 @@ def run(session, destination_id, max_items, dry_run, only_trace_id=None):
             f"FROM {DB}.SCORES s WHERE s.destination_id = ? AND RTRIM(s.host, '/') = ? AND s.project_id = ? "
             + ("AND s.trace_id = ? " if only_trace_id else "") +
             f"AND NOT EXISTS (SELECT 1 FROM {DB}.DELIVERIES d WHERE d.destination_id = s.destination_id "
-            f"AND d.item_type = 'BILLING_SCORE' AND d.item_key = s.score_id)",
+            f"AND d.item_type = 'BILLING_SCORE' AND d.item_key = s.score_id) "
+            f"ORDER BY s.created_at LIMIT {limits['max_scores_per_run']}",
             [destination_id, host, project_id] + tp)
         for sid, trace_id, obs_id, name, value, dtype, ts, comment in orphan_scores:
+            if time.monotonic() >= score_prepare_deadline:
+                break
             payload = {"id": sid, "traceId": trace_id, "observationId": obs_id, "name": name,
                        "value": value, "dataType": dtype, "timestamp": ts, "comment": comment}
             enqueue(session, destination_id, host, project_id, account, "BILLING_SCORE", sid, trace_id, payload, [])
@@ -359,23 +547,51 @@ def run(session, destination_id, max_items, dry_run, only_trace_id=None):
     if dry_run:
         return {**out, "ok": True}
 
-    # 5. Send due deliveries (oldest first). Trace batches before scores.
+    # 5. Trace and score budgets are separate. Bound materialised payload bytes to 16 MB.
+    q(session, f"UPDATE {DB}.DELIVERIES SET status='REJECTED',last_error='OVERSIZED_TRACE: request byte limit; no POST', "
+               f"updated_at=CURRENT_TIMESTAMP() WHERE destination_id=? AND item_type='TRACE_BATCH' "
+               f"AND status IN ('PENDING','RETRYABLE') {tf} AND OCTET_LENGTH(TO_JSON(payload))>?",
+               [destination_id] + tp + [limits['max_request_bytes']])
     due = q(session,
-            f"SELECT delivery_id FROM {DB}.DELIVERIES WHERE destination_id = ? "
-            f"AND status IN ('PENDING', 'RETRYABLE') "
-            f"AND (next_attempt_at IS NULL OR next_attempt_at <= CURRENT_TIMESTAMP()) "
-            f"{tf}"
-            f"ORDER BY IFF(item_type = 'TRACE_BATCH', 0, 1), created_at LIMIT {max_items}",
-            [destination_id] + tp)
+            f"SELECT delivery_id,TO_JSON(payload) FROM {DB}.DELIVERIES WHERE destination_id=? "
+            f"AND item_type='TRACE_BATCH' AND status IN ('PENDING','RETRYABLE') {tf}"
+            "AND (next_attempt_at IS NULL OR next_attempt_at<=CURRENT_TIMESTAMP()) "
+            "QUALIFY SUM(OCTET_LENGTH(TO_JSON(payload))) OVER (ORDER BY created_at,delivery_id "
+            "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)<=16000000 "
+            f"ORDER BY created_at,delivery_id LIMIT {max_items}", [destination_id] + tp)
+    batches, rejected = pack_traces([{'delivery_id':d,'payload':json.loads(p)} for d,p in due],limits)
+    for d_id, reason in rejected:
+        q(session, f"UPDATE {DB}.DELIVERIES SET status='REJECTED',last_error=?,updated_at=CURRENT_TIMESTAMP() "
+                   "WHERE delivery_id=? AND status IN ('PENDING','RETRYABLE')", [reason,d_id])
+    scores_due = q(session, f"SELECT delivery_id FROM {DB}.DELIVERIES WHERE destination_id=? "
+                   f"AND item_type='BILLING_SCORE' AND status IN ('PENDING','RETRYABLE') {tf}"
+                   "AND (next_attempt_at IS NULL OR next_attempt_at<=CURRENT_TIMESTAMP()) "
+                   f"ORDER BY created_at,delivery_id LIMIT {limits['max_scores_per_run']}", [destination_id] + tp)
     results = []
-    for (d_id,) in due:
-        res = send_one(session, destination_id, host, project_id, auth, max_attempts, d_id)
-        if res:
-            results.append(res)
-            if res["http"] in (401, 403):
-                break                           # destination paused; stop
-    out["sent"] = results
-    return {**out, "ok": not any(r.get("outcome") == "HELD_IDENTITY_MISMATCH" for r in results)}
+    if batches or scores_due:
+        with requests.Session() as http:
+            # Scores first: a persistent trace backlog must not consume their entire budget.
+            for (d_id,) in scores_due:
+                if time.monotonic() >= score_send_deadline:
+                    break
+                res = send_one(session,destination_id,host,project_id,auth,max_attempts,d_id,http)
+                if res:
+                    results.append(res)
+                    if res['http'] in (401,403):
+                        return {**out,'ok':False,'sent':results}
+            for items, wire in batches[:limits['max_trace_requests_per_run']]:
+                if time.monotonic() >= deadline:
+                    break
+                res = send_trace_batch(session,destination_id,host,project_id,auth,max_attempts,items,wire,http)
+                results.append(res)
+                if res['http'] in (401,403):
+                    break
+    out['sent'] = results
+    out['rejected_before_send'] = rejected
+    out['budget_elapsed'] = time.monotonic() >= deadline
+    out['elapsed_seconds'] = round(time.monotonic()-started,3)
+    return {**out,'ok': not rejected and all(r.get('outcome') == 'ACCEPTED' for r in results)}
+
 $$;
 
 CREATE OR REPLACE PROCEDURE LANGFUSE_EXPORTER.CORE.RECONCILE_DELIVERIES(DESTINATION_ID VARCHAR, MAX_ITEMS NUMBER)
@@ -513,7 +729,7 @@ BEGIN
   FOR d IN c DO
     BEGIN
       LET dest VARCHAR := d.destination_id;
-      CALL LANGFUSE_EXPORTER.CORE.PUBLISH_DESTINATION(:dest, 20, FALSE) INTO :r;
+      CALL LANGFUSE_EXPORTER.CORE.PUBLISH_DESTINATION(:dest, NULL, FALSE) INTO :r;
       results := ARRAY_APPEND(results, OBJECT_CONSTRUCT('destination_id', dest, 'result', r));
     EXCEPTION
       WHEN OTHER THEN   -- one failing destination must not stop the others

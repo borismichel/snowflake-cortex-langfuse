@@ -70,3 +70,13 @@ SQL and identifiers can leave Snowflake. Review data handling before broadening 
 
 References: [Langfuse v4 ingestion](https://langfuse.com/integrations/native/opentelemetry/migration-to-v4),
 [Snowflake usage view](https://docs.snowflake.com/en/sql-reference/account-usage/cortex_agent_usage_history).
+
+## v1.2 performance
+
+Requests now combine several whole traces, with destination-specific byte/span/count
+and invocation budgets. Oversized traces are held as rejected without POST. Partial
+requests hold every member for per-trace reconciliation. Scores still send individually.
+Payload construction, some enqueue work and score persistence remain per item; database
+scans can still grow with history. One publisher and serial destinations remain required.
+60k–80k traces per window, live batch compilation and exporter credit savings are unverified.
+See [SCALING.md](SCALING.md). HTTP audit bodies add storage and contain exported content.

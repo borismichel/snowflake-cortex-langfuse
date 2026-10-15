@@ -11,3 +11,8 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m unittest discover -s tests -v
+      - run: python tools/build_coco_package.py --output dist/coco
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coco-deployment-package
+          path: dist/coco/

@@ -78,3 +78,24 @@ secrets and delivery history. Source telemetry and data already in Langfuse rema
 Revoke project API keys separately in Langfuse. Any additional integrations, network
 rules or secrets you created outside this script’s default objects need separate cleanup.
 This is not a rollback procedure.
+
+## v1.2 batching and queue monitoring
+
+Read [SCALING.md](SCALING.md) before tuning limits. `PUBLISH_DESTINATION(alias, NULL,
+FALSE)` uses the destination's trace limit; an explicit MAX_ITEMS only reduces that
+limit. Scores have a separate cap. Use ONLY_TRACE_ID for a single-canary publication.
+Partial HTTP batches are reconciled per trace by the existing reconciler. HTTP_BATCHES
+is an immutable-body transport audit; its status need not change when individual
+members later reconcile successfully. There is no automatic replay of an entire partial batch.
+
+```sql
+SELECT * FROM LANGFUSE_EXPORTER.CORE.PUBLISH_QUEUE_V;
+SELECT destination_id,status,COUNT(*) AS requests,
+       SUM(OCTET_LENGTH(request_body)) AS request_bytes
+FROM LANGFUSE_EXPORTER.CORE.HTTP_BATCHES GROUP BY 1,2;
+```
+
+The audit stores another copy of exported content; apply appropriate access and retention.
+No automatic pruning is provided. Monitor both backlog depth and oldest age. Source
+READY traces not yet queued are separate from pending deliveries; inspect TRACE_STATUS_V
+as well. `max_run_seconds` is cooperative, not a guarantee of warehouse runtime.
