@@ -275,28 +275,33 @@ def trace_shape(payload):
 
 def pack_traces(items, limits):
     """Whole traces only. Byte limits include the final UTF-8 JSON envelope."""
-    batches, rejected, group, resources, n_spans = [], [], [], [], 0
+    prefix, suffix = b'{"resourceSpans":[', b']}'
+    envelope_bytes = len(prefix) + len(suffix)
+    batches, rejected, group, pieces, n_spans = [], [], [], [], 0
+    size = envelope_bytes
     for item in items:
         try:
             count = trace_shape(item['payload'])
-        except (ValueError, TypeError, KeyError) as exc:
+            piece = b','.join(encoded(r) for r in item['payload']['resourceSpans'])
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
             rejected.append((item['delivery_id'], 'INVALID_PAYLOAD: ' + str(exc)))
             continue
-        rs = item['payload']['resourceSpans']
-        if count > limits['max_spans_per_request'] or len(encoded({'resourceSpans': rs})) > limits['max_request_bytes']:
+        if count > limits['max_spans_per_request'] or envelope_bytes + len(piece) > limits['max_request_bytes']:
             rejected.append((item['delivery_id'], 'OVERSIZED_TRACE: adjust limits or review payload; no POST'))
             continue
-        candidate = {'resourceSpans': resources + rs}
+        # Encode each resource once rather than reserialising an ever-growing candidate.
+        next_size = size + len(piece) + (1 if group else 0)
         if group and (len(group) >= limits['max_traces_per_request'] or
                       n_spans + count > limits['max_spans_per_request'] or
-                      len(encoded(candidate)) > limits['max_request_bytes']):
-            batches.append((group, encoded({'resourceSpans': resources})))
-            group, resources, n_spans = [], [], 0
+                      next_size > limits['max_request_bytes']):
+            batches.append((group, prefix + b','.join(pieces) + suffix))
+            group, pieces, n_spans, size = [], [], 0, envelope_bytes
+        size += len(piece) + (1 if group else 0)
         group.append(item)
-        resources.extend(rs)
+        pieces.append(piece)
         n_spans += count
     if group:
-        batches.append((group, encoded({'resourceSpans': resources})))
+        batches.append((group, prefix + b','.join(pieces) + suffix))
     return batches, rejected
 
 
@@ -548,7 +553,7 @@ def run(session, destination_id, max_items, dry_run, only_trace_id=None):
         return {**out, "ok": True}
 
     # 5. Trace and score budgets are separate. Bound materialised payload bytes to 16 MB.
-    q(session, f"UPDATE {DB}.DELIVERIES SET status='REJECTED',last_error='OVERSIZED_TRACE: request byte limit; no POST', "
+    oversized = q(session, f"UPDATE {DB}.DELIVERIES SET status='REJECTED',last_error='OVERSIZED_TRACE: request byte limit; no POST', "
                f"updated_at=CURRENT_TIMESTAMP() WHERE destination_id=? AND item_type='TRACE_BATCH' "
                f"AND status IN ('PENDING','RETRYABLE') {tf} AND OCTET_LENGTH(TO_JSON(payload))>?",
                [destination_id] + tp + [limits['max_request_bytes']])
@@ -588,9 +593,10 @@ def run(session, destination_id, max_items, dry_run, only_trace_id=None):
                     break
     out['sent'] = results
     out['rejected_before_send'] = rejected
+    out['oversized_byte_rejections'] = int(oversized[0][0]) if oversized else 0
     out['budget_elapsed'] = time.monotonic() >= deadline
     out['elapsed_seconds'] = round(time.monotonic()-started,3)
-    return {**out,'ok': not rejected and all(r.get('outcome') == 'ACCEPTED' for r in results)}
+    return {**out,'ok': not rejected and not out['oversized_byte_rejections'] and all(r.get('outcome') == 'ACCEPTED' for r in results)}
 
 $$;
 
