@@ -1,0 +1,44 @@
+{
+  "exporter_version": "1.2.0",
+  "source_commit": null,
+  "mode": "upgrade",
+  "status": "INVENTORY_REQUIRED",
+  "existing_installation": {
+    "account": null,
+    "database": null,
+    "schema": null,
+    "runtime_role": null,
+    "warehouse": null,
+    "schema_versions": [],
+    "routing_safety_baseline_confirmed": null,
+    "customisations": [],
+    "backup_location": null
+  },
+  "destinations": [],
+  "destination_limits_shape": {
+    "destination_id": "<discovered alias>",
+    "max_traces_per_run": 1000,
+    "max_traces_per_request": 100,
+    "max_spans_per_request": 1000,
+    "max_request_bytes": 1000000,
+    "max_trace_requests_per_run": 20,
+    "max_scores_per_run": 100,
+    "max_run_seconds": 300
+  },
+  "task_states_before": [],
+  "preserve_existing_mapping_and_credentials": true,
+  "restore_previously_active_schedule_after_checks": null,
+  "require_billing_verification_before_resumption": null,
+  "canary_scope": null,
+  "existing_backlog_dispatch_during_validation_approved": null,
+  "volume": {
+    "traces_per_window": null,
+    "window_minutes": null,
+    "sustained_or_backfill": null,
+    "p95_spans_per_trace": null,
+    "p95_payload_bytes": null,
+    "credit_budget": null,
+    "load_test_authorised": null
+  },
+  "unresolved_questions": []
+}

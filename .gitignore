@@ -12,3 +12,5 @@ secrets.sql
 __pycache__/
 *.py[cod]
 .venv/
+# Generated CoCo upload artifacts (build from a clean commit)
+dist/

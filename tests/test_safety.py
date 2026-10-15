@@ -121,6 +121,7 @@ class Delivery(unittest.TestCase):
     def test_orphan_recovered_from_saved_values(self):
         ns=body('05b_sender.sql'); saved=('score','trace','root','snowflake.token_credits',0.123,'NUMERIC','2026-10-13T10:00:00Z','saved')
         def q(session,sql,params=None):
+            if 'SELECT max_traces_per_run' in sql:return [ns['DEFAULT_LIMITS']]
             if 'SELECT langfuse_host' in sql:return [('https://host','p',True,None,5)]
             if 'CURRENT_ACCOUNT()' in sql:return [('account',)]
             if 'SELECT s.score_id' in sql:return [saved]
@@ -162,11 +163,12 @@ class Readback(unittest.TestCase):
             self.assertEqual(ns['run'](session,'d','score')['ok'],expected)
     def test_existing_delivery_is_not_reenqueued(self):
         ns=body('05b_sender.sql'); conn=sqlite3.connect(':memory:')
-        conn.executescript("""CREATE TABLE SCORES(score_id,destination_id,host,project_id,trace_id,observation_id,name,value,data_type,score_ts,comment);
+        conn.executescript("""CREATE TABLE SCORES(score_id,destination_id,host,project_id,trace_id,observation_id,name,value,data_type,score_ts,comment,created_at);
         CREATE TABLE DELIVERIES(destination_id,item_type,item_key,status);
-        INSERT INTO SCORES VALUES ('s','d','https://host','p','t','root','credits',1,'NUMERIC','ts','comment');
+        INSERT INTO SCORES VALUES ('s','d','https://host','p','t','root','credits',1,'NUMERIC','ts','comment','ts');
         INSERT INTO DELIVERIES VALUES ('d','BILLING_SCORE','s','ACCEPTED');""")
         def q(session,sql,params=None):
+            if 'SELECT max_traces_per_run' in sql:return [ns['DEFAULT_LIMITS']]
             if 'SELECT langfuse_host' in sql:return [('https://host','p',True,None,5)]
             if 'CURRENT_ACCOUNT()' in sql:return [('account',)]
             if 'SELECT s.score_id' in sql:return conn.execute(sql.replace(ns['DB']+'.',''),params).fetchall()

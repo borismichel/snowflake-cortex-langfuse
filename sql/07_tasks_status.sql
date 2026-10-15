@@ -14,7 +14,7 @@
      VIEW  EXPORTER_HEALTH_V          one row per destination: trace/billing/delivery counts
 
    TASK POLICY
-     Tasks are created SUSPENDED and must stay suspended until step 06 has
+     Tasks are created SUSPENDED and must stay suspended until canary acceptance has
      verified one real browser-UI run in Langfuse (hierarchy, content, timings,
      usage, destination). Resuming is a manual, deliberate step (see OPERATIONS).
 
@@ -42,14 +42,14 @@ AS
   CALL LANGFUSE_EXPORTER.CORE.STAGE_AND_ROUTE();
 
 /* ---------------------------------------------------------------------------
-   PART B - publish task (ENABLE ONLY AFTER STEP 05b EXISTS AND STEP 06 PASSED)
+   PART B - publish task (ENABLE ONLY AFTER STEP 05b EXISTS AND CANARY ACCEPTANCE PASSED)
    Runs after each staging run; one call per enabled destination keeps failures
    isolated by destination.
 
    CREATE OR REPLACE TASK LANGFUSE_EXPORTER.CORE.PUBLISH_TASK
      WAREHOUSE = LANGFUSE_EXPORTER_WH
      AFTER LANGFUSE_EXPORTER.CORE.STAGE_AND_ROUTE_TASK
-     COMMENT = 'Langfuse exporter: publish READY traces, billing and feedback scores'
+     COMMENT = 'Langfuse exporter: publish READY traces, billing scores'
    AS
      CALL LANGFUSE_EXPORTER.CORE.PUBLISH_ALL_DESTINATIONS();   -- defined in 05b
    ------------------------------------------------------------------------- */
@@ -127,7 +127,7 @@ SELECT name, state, scheduled_time, completed_time, error_message
 
 /* =============================================================================
    OPERATIONS
-     Resume (ONLY after step 06 is VERIFIED):
+     Resume (ONLY after canary acceptance is VERIFIED):
        ALTER TASK LANGFUSE_EXPORTER.CORE.PUBLISH_TASK RESUME;          -- child first
        ALTER TASK LANGFUSE_EXPORTER.CORE.STAGE_AND_ROUTE_TASK RESUME;  -- then root
      Pause everything:
@@ -151,3 +151,5 @@ SELECT name, state, scheduled_time, completed_time, error_message
      DROP VIEW IF EXISTS LANGFUSE_EXPORTER.CORE.BILLING_OVERDUE_V;
      DROP VIEW IF EXISTS LANGFUSE_EXPORTER.CORE.DELIVERY_STATUS_V;
    ========================================================================== */
+
+-- Install 07a_batch_status.sql for the v1.2 queue view (also safe on an existing graph).

@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "source_commit": null,
+  "status": "INTERVIEW_REQUIRED",
+  "account": {
+    "confirmed_account": null,
+    "region": null,
+    "deployment_role": "ACCOUNTADMIN",
+    "fresh_install_confirmed": null
+  },
+  "infrastructure": {
+    "runtime_role": "LANGFUSE_EXPORTER_ROLE",
+    "warehouse": "LANGFUSE_EXPORTER_WH",
+    "warehouse_size": "XSMALL",
+    "auto_suspend_seconds": 60,
+    "database": "LANGFUSE_EXPORTER",
+    "schema": "CORE",
+    "external_access_integration": "LANGFUSE_CLOUD_EAI",
+    "network_rule": "LANGFUSE_CLOUD_EGRESS"
+  },
+  "data_scope": {
+    "full_content_export_approved": null,
+    "account_wide_raw_staging_approved": null,
+    "selected_agents_history_export_approved": null,
+    "future_agents_in_final_scope": null
+  },
+  "destinations": [
+    {
+      "destination_id": "LANGFUSE_TEST",
+      "project_label": null,
+      "langfuse_host": null,
+      "project_id": null,
+      "project_identity_verified": false,
+      "secret_fqn": "LANGFUSE_EXPORTER.CORE.LANGFUSE_TEST_CREDENTIALS",
+      "secret_ready": false,
+      "integration_name": "LANGFUSE_CLOUD_EAI",
+      "publication_mode": "TRACE_FIRST",
+      "required_billing": [
+        "TOKEN_CREDITS"
+      ],
+      "quiet_minutes": 5,
+      "billing_overdue_hours": 24,
+      "environment": null,
+      "publisher_limits": {
+        "max_traces_per_run": 1000,
+        "max_traces_per_request": 100,
+        "max_spans_per_request": 1000,
+        "max_request_bytes": 1000000,
+        "max_trace_requests_per_run": 20,
+        "max_scores_per_run": 100,
+        "max_run_seconds": 300
+      }
+    }
+  ],
+  "initial_routes": [],
+  "final_routes": [],
+  "route_row_shape": {
+    "route_id": "<unique alias>",
+    "match_level": "AGENT",
+    "agent_database": "<exact recorded database name>",
+    "agent_schema": "<exact recorded schema name>",
+    "agent_name": "<exact recorded agent name>",
+    "action": "ROUTE",
+    "destination_id": "LANGFUSE_TEST"
+  },
+  "canaries": [],
+  "schedule": {
+    "interval_minutes": 15,
+    "activate_after_acceptance": null,
+    "require_billing_verification_before_activation": null
+  },
+  "unresolved_questions": [],
+  "exporter_version": "1.2.0",
+  "volume": {
+    "traces_per_window": null,
+    "window_minutes": null,
+    "sustained_or_backfill": null,
+    "average_spans_per_trace": null,
+    "p95_spans_per_trace": null,
+    "average_payload_bytes": null,
+    "p95_payload_bytes": null,
+    "target_latency_minutes": null,
+    "exporter_credit_budget": null,
+    "load_test_authorised": null,
+    "load_test_trace_cap": null
+  }
+}

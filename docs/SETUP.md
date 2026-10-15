@@ -24,7 +24,7 @@ The XSMALL warehouse auto-suspends after 60 seconds. A 15-minute schedule can wa
 
 After 01, expect the role and schema to exist, agent event rows to be visible, and
 unredacted input samples where the source contains them. Billing can be absent initially.
-Run 02, 02b and 02c next as listed in INSTALL.md.
+Run 02, 02b, 02c and 02d next as listed in INSTALL.md.
 
 ## Configure the host
 
@@ -82,3 +82,10 @@ check that key pair against the project API privately, then apply 03a and call
 | Compilation error after a dependent step | Run definitions sequentially; keep scheduling suspended and inspect the failing statement. |
 
 Continue with [destination mapping and installation](INSTALL.md).
+
+## v1.2 dispatch configuration
+
+Use [batching and sizing](SCALING.md) to choose trace/request/score/time limits. The
+CoCo interview records expected traces per window, spans and payload size. Defaults
+are for controlled validation, not a high-volume capacity claim. Source staging is
+account-wide; project routing controls export, not raw local staging scope.

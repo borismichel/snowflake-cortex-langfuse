@@ -1,4 +1,4 @@
-# Snowflake Cortex → Langfuse
+# Snowflake Cortex → Langfuse · v1.2
 
 Export Cortex Agent traces to Langfuse, including runs made in Snowflake’s browser UI. The exporter runs inside Snowflake using SQL, Python stored procedures and scheduled tasks.
 
@@ -14,13 +14,13 @@ Export Cortex Agent traces to Langfuse, including runs made in Snowflake’s bro
 
 ![Snowflake Cortex browser run connected to its Langfuse trace](docs/assets/cortex-langfuse.png)
 
-[Install](docs/INSTALL.md) · [Configure agent/project mapping](sql/03a_destination_and_routes.sql) · [Operate and recover](docs/OPERATIONS.md) · [Validation status](docs/STATUS.md)
+[Install](docs/INSTALL.md) · [v1.2 changes](CHANGELOG.md) · [Batching and sizing](docs/SCALING.md) · [CoCo setup](deploy/coco/00_START_HERE.md) · [CoCo update](deploy/coco-upgrade/00_START_HERE.md) · [Configure agent/project mapping](sql/03a_destination_and_routes.sql) · [Operate and recover](docs/OPERATIONS.md) · [Validation status](docs/STATUS.md)
 
 ## Why this exists
 
 I wanted to inspect what happened between a question to a Cortex agent and its answer, even when I ran it directly in Snowsight. This project exports the telemetry Snowflake records so those runs can be inspected in Langfuse alongside other AI applications.
 
-The original V1 was demonstrated with live browser runs. **The code here includes newer routing safeguards tested offline, but not yet compiled or exercised in Snowflake.** Start in a disposable environment. A fresh-account manual installation and live multi-project checks are still outstanding.
+The original V1 was demonstrated with live browser runs. **v1.2 adds bounded multi-trace HTTP batching and routing safeguards tested offline, but not yet compiled or exercised in Snowflake.** Start in a disposable environment. A fresh-account manual installation and live multi-project checks are still outstanding.
 
 ## What you can inspect
 
@@ -42,15 +42,30 @@ flowchart LR
   subgraph SF[Snowflake]
     A[Cortex Agent events] --> C[Stage and route]
     B[Delayed usage history] --> C
-    C --> D[Build payload and track delivery]
+    C --> D[Freeze one delivery per trace]
+    D --> G[Pack by destination, bytes and spans]
+    G --> H[Persist request and claim members]
+    C --> I[Select missing credit scores]
+    I --> J[Separate bounded score queue]
   end
-  D -->|OTLP over HTTPS| E[Langfuse traces]
-  D -->|Scores API| F[Snowflake credit scores]
+  H -->|Multi-trace OTLP requests| E[Langfuse observations]
+  J -->|Individual Scores API requests| F[Root credit scores]
+  E --> K[Per-trace readback and reconciliation]
 ```
 
 There is no external worker to run. The exporter reads `SNOWFLAKE.LOCAL.AI_OBSERVABILITY_EVENTS` and joins billing from `SNOWFLAKE.ACCOUNT_USAGE.CORTEX_AGENT_USAGE_HISTORY`. It sends selected telemetry **out of Snowflake** to your configured Langfuse host using an external access integration and Snowflake secrets.
 
 This is a polling exporter, not live instrumentation. The supplied schedule is every 15 minutes; eligibility also depends on source availability and a span-age threshold. Neither a watermark nor a successful task run proves delivery.
+
+## v1.2 batching and volume
+
+The publisher combines whole traces for the same destination into bounded OTLP requests. It preserves per-trace identity and recovery, writes span membership in bulk, reuses an HTTP session and gives credit scores a separate dispatch budget. Partial batches are held for per-trace reconciliation; accepted observations are never resent as an update.
+
+Defaults: **100 traces / 1,000 spans / 1 MB per request**, up to **1,000 trace candidates, 20 trace requests and 100 score sends per destination invocation**. A five-minute cooperative time budget can reduce those numbers; SQL/HTTP operations already in progress may exceed it. These are operating limits, not throughput promises.
+
+**60,000–80,000 traces per window is a benchmark target, not a supported capacity claim.** Payload construction still calls a stored procedure per trace, some bookkeeping remains per trace/score, and staging can revisit history. Increasing limits or warehouse size alone does not establish capacity. See [sizing, credits, remaining bottlenecks and live acceptance](docs/SCALING.md).
+
+The repository version is recorded in [VERSION](VERSION). There is no GitHub Release requirement.
 
 ## Choose where each agent goes
 
@@ -95,10 +110,11 @@ Snowflake documents up to one hour of latency for the usage view, with SQL query
 | Check | Status |
 | --- | --- |
 | Earlier V1 browser traces and root credit scores | Demonstrated during development |
-| Current routing and delivery safeguards | 21 offline tests |
+| v1.2 batching, routing and delivery safeguards | Offline regression suite; see [status](docs/STATUS.md) |
 | Current snapshot compiled/deployed in Snowflake | Not yet verified |
 | Clean manual install in a fresh account | Not yet verified |
 | Live routing across two projects | Not yet verified |
+| 60k–80k traces per window / exporter credit benchmark | Not yet verified |
 | Exactly-once delivery / concurrent publishers | Not provided |
 
 Langfuse v4 observations are immutable. Do not resend accepted spans to update them. Uncertain sends need reconciliation; late spans are detected but not exported. Feedback export is not implemented. See [limitations](docs/LIMITATIONS.md) and the [live acceptance checklist](docs/STATUS.md).

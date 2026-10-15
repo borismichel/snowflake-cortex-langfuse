@@ -1,6 +1,14 @@
-# Validation status
+# Validation status · v1.2
 
 ## Implemented
+
+- v1.2 multi-trace OTLP packing with UTF-8 byte, span and trace caps; frozen per-trace
+  payloads remain the reconciliation source. HTTP batches persist exact bodies and
+  membership, with atomic multi-member claim/finalisation and bulk attempt updates.
+- Set-based per-trace span membership inserts with atomic enqueue; independent bounded
+  score work and missing-component candidate selection; HTTP connection reuse.
+- Version/migration, updated diagrams, sizing/credit benchmark and versioned CoCo package builder.
+
 
 - Added 03a as the complete operator-owned active agent/project mapping. It supports
   shared projects, separate projects and exclusions; no credentials in configuration.
@@ -27,14 +35,20 @@ Run from the repository root with Python 3.11 (local checks also run on 3.9):
 python3 -m unittest discover -s tests -v
 ```
 
-21 offline tests pass, including the eleven original normalizer fixtures and a
+41 offline regression tests pass, including the eleven original normalizer fixtures and a
 known leading-tag boundary probe. Tests execute the shipped resolver SELECT using SQLite with an ARRAY_AGG adapter,
 and actual embedded Python handlers using mock Snowpark/HTTP interfaces. This checks
 route decision behavior and local failure handling. It is not Snowflake compilation,
 transaction/warehouse validation, HTTP integration or evidence of deployment.
-The private archive checksum test is excluded from this standalone public snapshot. CI runs the same 21 offline tests.
+The private archive checksum test is excluded from this standalone public snapshot. CI runs the same offline suite.
 
 ## Required live acceptance before promotion
+
+- Compile 02d and changed 05b/07 in Snowflake; validate scoped transaction rollback and
+  multi-trace member state under partial response, timeout and crash after POST.
+- Verify byte/span caps and oversized-trace holds against real OTLP. Confirm backlog/score
+  fairness and all scale/credit acceptance in [SCALING.md](SCALING.md). NOT RUN.
+
 
 - Compile 02c/03a/04/05b/05c/05d in a disposable Snowflake environment. Confirm failed
   03a validation changes no persistent mapping rows and a valid apply is atomic.
@@ -81,3 +95,5 @@ show an earlier development run and are illustrative, not acceptance evidence fo
 this exact snapshot. The message adapter was checked on three development traces;
 input-token semantics for `claude-opus-5-5` were compared with the usage view on two
 requests / six model steps. Other models keep raw counters without normalised usage.
+
+Local packaging and handler tests are not new-account or high-volume deployment evidence.
