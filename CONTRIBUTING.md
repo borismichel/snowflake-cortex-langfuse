@@ -20,9 +20,11 @@ invented runtime tests. Third-party logos are not project branding or endorsemen
 
 ## v1.2 deployment artifacts
 
-Keep VERSION, CHANGELOG, install/upgrade order and deploy/coco instructions in sync
+Keep VERSION, CHANGELOG, install/upgrade order and deploy/coco and deploy/coco-upgrade instructions in sync
 when changing procedures or settings. Commit before running
 `python3 tools/build_coco_package.py --output /tmp/coco-v1.2`. The ZIP/text bundle
 pins HEAD and copies only allowlisted source files. CI publishes the same package
 as a workflow artifact; this does not create a GitHub Release. Generated binaries
 stay out of Git. Preserve a manual SQL path and label unverified scale claims.
+
+Build the separate existing-installation package with `--mode upgrade`; it must not inherit the fresh-install interview or rerun seeds.

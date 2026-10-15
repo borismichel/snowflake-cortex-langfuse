@@ -35,7 +35,7 @@ Run from the repository root with Python 3.11 (local checks also run on 3.9):
 python3 -m unittest discover -s tests -v
 ```
 
-39 offline regression tests pass, including the eleven original normalizer fixtures and a
+41 offline regression tests pass, including the eleven original normalizer fixtures and a
 known leading-tag boundary probe. Tests execute the shipped resolver SELECT using SQLite with an ARRAY_AGG adapter,
 and actual embedded Python handlers using mock Snowpark/HTTP interfaces. This checks
 route decision behavior and local failure handling. It is not Snowflake compilation,

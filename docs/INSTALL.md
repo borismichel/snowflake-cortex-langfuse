@@ -80,14 +80,19 @@ suspended until the canary checks below pass:
 6. Install 07 only when ready to create a new task graph; its one-time EXECUTE TASK
    is now commented. Part B still requires creating the publisher child task.
    Follow [task activation](OPERATIONS.md#scheduled-publication), child before root.
-   Never include 99_uninstall.sql in an installation batch.
+   Install 07a for the v1.2 queue view. Never include 99_uninstall.sql in an installation batch.
 
 ## Upgrade an existing exporter to v1.2
 
+Use the [separate CoCo update workflow](../deploy/coco-upgrade/00_START_HERE.md)
+for an already installed account. Build it with
+`python3 tools/build_coco_package.py --mode upgrade --output /tmp/coco-v1.2-update`.
+It inventories live DDL and preserves routes/secrets/tasks; it is not the fresh-install interview.
+
 For an account already on the public routing-safety snapshot: suspend the root task,
 wait for the active graph/manual publisher to finish, and capture current procedure DDL
-and configuration. Apply **02d**, replace **05b**, and reinstall **07** only if you need
-its new monitoring views: extract Part C's views rather than replacing the existing task graph.
+and configuration. Apply **02d**, replace **05b**, then install **07a_batch_status.sql**
+(the monitoring-only view). Do not run 07 to upgrade an existing task graph.
 Keep the current task definitions and destination secret bindings. The existing scheduled
 wrapper is replaced by 05b and now uses configured limits. Run the batching canaries in
 [SCALING.md](SCALING.md) before resuming. Existing per-trace deliveries remain valid;

@@ -16,16 +16,19 @@ def git(*args):
     return subprocess.check_output(['git', *args], cwd=ROOT)
 
 
-def build(output):
+def build(output, mode="install"):
     if git('status', '--porcelain', '--untracked-files=normal').strip():
         raise SystemExit('Commit or clean changes first: the package pins committed HEAD, never a mixed working tree.')
+    if mode not in ('install', 'upgrade'):
+        raise SystemExit('Unsupported package mode')
+    agent_prefix = 'deploy/coco-upgrade/' if mode == 'upgrade' else 'deploy/coco/'
     sha = git('rev-parse', 'HEAD').decode().strip()
     names = git('ls-tree', '-r', '--name-only', 'HEAD').decode().splitlines()
     version = git('show', 'HEAD:VERSION').decode().strip()
     contents = {}
     for name in names:
         path = Path(name)
-        if name.startswith('deploy/coco/') and path.suffix in ('.md', '.json'):
+        if name.startswith(agent_prefix) and path.suffix in ('.md', '.json'):
             target = path.name
         elif name in ('LICENSE', 'README.md', 'VERSION', 'CHANGELOG.md', 'CONTRIBUTING.md', 'tools/build_coco_package.py') or (
             path.parent.as_posix() in ('sql', 'docs', 'tests') and path.suffix in ('.sql', '.md', '.py')):
@@ -43,7 +46,7 @@ def build(output):
     contents['02_CONFIG.template.json'] = (json.dumps(config, indent=2) + '\n').encode()
     contents['SOURCE.json'] = (json.dumps({
         'repository': 'https://github.com/borismichel/snowflake-cortex-langfuse',
-        'commit': sha, 'version': version, 'live_validation': 'NOT RUN by package builder',
+        'commit': sha, 'version': version, 'mode': mode, 'live_validation': 'NOT RUN by package builder',
         'source': 'reference files copied unchanged from git blobs',
         'sql_files': sum(n.startswith('reference/sql/') for n in contents),
         'configuration': 'interview worksheet; CoCo generates configured SQL, no runtime JSON loader'
@@ -52,8 +55,8 @@ def build(output):
         hashlib.sha256(data).hexdigest() + '  ' + name + '\n' for name, data in sorted(contents.items())).encode()
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
-    archive = output / ('coco-snowflake-langfuse-v' + version + '.zip')
-    text = output / 'COCO_UPLOAD.txt'
+    archive = output / ('coco-snowflake-langfuse-v' + version + ('-upgrade' if mode == 'upgrade' else '') + '.zip')
+    text = output / ('COCO_UPDATE.txt' if mode == 'upgrade' else 'COCO_UPLOAD.txt')
     # Fixed member times and ordering make the same commit yield identical ZIP bytes.
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
         for name, data in sorted(contents.items()):
@@ -61,7 +64,7 @@ def build(output):
             info.compress_type = zipfile.ZIP_DEFLATED
             z.writestr(info, data)
     with text.open('w') as f:
-        f.write('CoCo v' + version + ' upload. Read 00_START_HERE.md and 01_COCO_RUNBOOK.md first.\n'
+        f.write('CoCo v' + version + ' ' + mode + ' upload. Read 00_START_HERE.md and 01_COCO_RUNBOOK.md first.\n'
                 'These are separate files, NOT a single SQL script.\n')
         for name, data in sorted(contents.items()):
             f.write('\n===== BEGIN FILE: ' + name + ' =====\n' + data.decode() +
@@ -79,4 +82,6 @@ def build(output):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', required=True)
-    build(parser.parse_args().output)
+    parser.add_argument('--mode', choices=['install', 'upgrade'], default='install')
+    args = parser.parse_args()
+    build(args.output, args.mode)

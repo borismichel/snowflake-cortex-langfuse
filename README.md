@@ -14,7 +14,7 @@ Export Cortex Agent traces to Langfuse, including runs made in Snowflake’s bro
 
 ![Snowflake Cortex browser run connected to its Langfuse trace](docs/assets/cortex-langfuse.png)
 
-[Install](docs/INSTALL.md) · [v1.2 changes](CHANGELOG.md) · [Batching and sizing](docs/SCALING.md) · [CoCo setup](deploy/coco/00_START_HERE.md) · [Configure agent/project mapping](sql/03a_destination_and_routes.sql) · [Operate and recover](docs/OPERATIONS.md) · [Validation status](docs/STATUS.md)
+[Install](docs/INSTALL.md) · [v1.2 changes](CHANGELOG.md) · [Batching and sizing](docs/SCALING.md) · [CoCo setup](deploy/coco/00_START_HERE.md) · [CoCo update](deploy/coco-upgrade/00_START_HERE.md) · [Configure agent/project mapping](sql/03a_destination_and_routes.sql) · [Operate and recover](docs/OPERATIONS.md) · [Validation status](docs/STATUS.md)
 
 ## Why this exists
 

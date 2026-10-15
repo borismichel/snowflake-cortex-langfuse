@@ -33,6 +33,21 @@ class Package(unittest.TestCase):
                 sha,name=line.split('  ',1);self.assertEqual(sha,hashlib.sha256(contents[name]).hexdigest())
             name='coco-snowflake-langfuse-v1.2.0.zip'
             self.assertEqual((Path(a)/name).read_bytes(),(Path(b)/name).read_bytes())
+    def test_upgrade_has_its_own_interview_and_artifact_names(self):
+        extra={'deploy/coco/01_COCO_RUNBOOK.md':b'fresh install',
+               'deploy/coco-upgrade/01_COCO_RUNBOOK.md':b'preserve existing state',
+               'deploy/coco-upgrade/02_CONFIG.template.json':b'{"exporter_version":"1.2.0","mode":"upgrade"}'}
+        with tempfile.TemporaryDirectory() as d,patch.object(builder,'git',self.fixture(extra)):
+            contents=builder.build(d,mode='upgrade')
+            self.assertEqual(contents['01_COCO_RUNBOOK.md'],b'preserve existing state')
+            self.assertEqual(json.loads(contents['SOURCE.json'])['mode'],'upgrade')
+            self.assertTrue((Path(d)/'COCO_UPDATE.txt').exists())
+            self.assertTrue((Path(d)/'coco-snowflake-langfuse-v1.2.0-upgrade.zip').exists())
+            self.assertFalse((Path(d)/'COCO_UPLOAD.txt').exists())
+    def test_unknown_mode_fails_without_artifacts(self):
+        with tempfile.TemporaryDirectory() as d,patch.object(builder,'git',self.fixture()):
+            with self.assertRaises(SystemExit):builder.build(d,mode='unsupported')
+            self.assertEqual(list(Path(d).iterdir()),[])
     def test_dirty_worktree_fails_before_writing(self):
         with tempfile.TemporaryDirectory() as d,patch.object(builder,'git',self.fixture(dirty=True)):
             with self.assertRaises(SystemExit):builder.build(d)

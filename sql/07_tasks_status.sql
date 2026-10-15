@@ -152,11 +152,4 @@ SELECT name, state, scheduled_time, completed_time, error_message
      DROP VIEW IF EXISTS LANGFUSE_EXPORTER.CORE.DELIVERY_STATUS_V;
    ========================================================================== */
 
--- v1.2 queue monitoring; install this view without replacing an existing task graph.
-CREATE OR REPLACE VIEW LANGFUSE_EXPORTER.CORE.PUBLISH_QUEUE_V AS
-SELECT destination_id,item_type,status,COUNT(*) AS items,
-       MIN(created_at) AS oldest_created_at,
-       DATEDIFF('second',MIN(created_at),CURRENT_TIMESTAMP()) AS oldest_age_seconds
-FROM LANGFUSE_EXPORTER.CORE.DELIVERIES
-WHERE status <> 'ACCEPTED'
-GROUP BY destination_id,item_type,status;
+-- Install 07a_batch_status.sql for the v1.2 queue view (also safe on an existing graph).
