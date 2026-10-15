@@ -3,7 +3,7 @@
 For an EXISTING Snowflake Cortex → Langfuse exporter. This is not a fresh installation.
 Custom community software, MIT licence, provided as is; live v1.2 validation remains pending.
 
-Upload this package and say:
+Upload COCO_UPDATE.txt and say:
 
 > Upgrade my existing exporter to v1.2 using this package. Read 01_COCO_RUNBOOK.md.
 > First inspect the live installation and interview me only for missing upgrade decisions.
@@ -16,7 +16,7 @@ Upload this package and say:
 Build from a clean repo checkout:
 `python3 tools/build_coco_package.py --mode upgrade --output /tmp/coco-v1.2-update`
 
-Use the generated ZIP or COCO_UPDATE.txt. The reference tree contains canonical source
+CoCo does not accept ZIP uploads. Use the generated COCO_UPDATE.txt; the ZIP is only an offline archive. The reference tree contains canonical source
 files for inspection; it is NOT an instruction to execute every file. The routine upgrade
 from the routing-safety snapshot is **02d → 05b → 07a**, with snapshots, suspension and
 validation boundaries described in the runbook. Older/custom deployments need compatibility

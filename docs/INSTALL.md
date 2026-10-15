@@ -87,6 +87,7 @@ suspended until the canary checks below pass:
 Use the [separate CoCo update workflow](../deploy/coco-upgrade/00_START_HERE.md)
 for an already installed account. Build it with
 `python3 tools/build_coco_package.py --mode upgrade --output /tmp/coco-v1.2-update`.
+Upload `COCO_UPDATE.txt`, not the ZIP: CoCo does not accept ZIP files.
 It inventories live DDL and preserves routes/secrets/tasks; it is not the fresh-install interview.
 
 For an account already on the public routing-safety snapshot: suspend the root task,
@@ -196,7 +197,8 @@ SCORES, DELIVERIES or TRACES. The additive 02c columns may remain. The original 
 
 Use the [versioned CoCo interview](../deploy/coco/00_START_HERE.md). Build its upload
 package with `python3 tools/build_coco_package.py --output /tmp/coco-v1.2` from a clean
-checkout; the package pins HEAD and contains the same scripts. Agents must interview
+checkout; upload `COCO_UPLOAD.txt`. CoCo does not accept ZIP files; the generated ZIP
+is only an offline archive. The package pins HEAD and contains the same scripts. Agents must interview
 for volume/window length and limits as well as routes, credentials and cadence.
 They must not assume this version supports 80k/window or that a canary proves capacity.
 

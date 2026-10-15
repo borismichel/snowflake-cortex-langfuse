@@ -28,3 +28,5 @@ as a workflow artifact; this does not create a GitHub Release. Generated binarie
 stay out of Git. Preserve a manual SQL path and label unverified scale claims.
 
 Build the separate existing-installation package with `--mode upgrade`; it must not inherit the fresh-install interview or rerun seeds.
+
+CoCo does not accept ZIP uploads. All handoffs must direct users to `COCO_UPLOAD.txt` (new installation) or `COCO_UPDATE.txt` (existing installation). ZIP files are offline archives only; extract text files from downloaded CI artifacts before uploading to CoCo.

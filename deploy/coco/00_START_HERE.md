@@ -17,7 +17,7 @@ Read 01_COCO_RUNBOOK.md first. Interview me in short rounds, discover what you c
 - reference/: unchanged SQL, documentation, offline tests and licence from the public repository.
 - SOURCE.json and SHA256SUMS: exact source revision and file integrity.
 
-Upload the ZIP if your CoCo attachment interface accepts it. Otherwise upload the companion COCO_UPLOAD.txt, which contains the same text files with BEGIN/END FILE boundaries. The text bundle is reference material, not one executable SQL script. If files are truncated or inaccessible, CoCo must identify the missing file before using it.
+CoCo does not accept ZIP uploads. Upload COCO_UPLOAD.txt, which contains the same text files with BEGIN/END FILE boundaries. The text bundle is reference material, not one executable SQL script. If files are truncated or inaccessible, CoCo must identify the missing file before using it.
 
 ## What “variable path” means here
 
@@ -32,6 +32,6 @@ No previous account credentials, historical traces, raw screenshots or private p
 ## Build the current package
 
 From a clean repository checkout: `python3 tools/build_coco_package.py --output /tmp/coco-v1.2`.
-Upload the generated ZIP or COCO_UPLOAD.txt. This replaces the older unversioned CoCo
+Upload the generated COCO_UPLOAD.txt. The ZIP is only an offline archive; do not upload it to CoCo. This replaces the older unversioned CoCo
 package; do not mix its scripts with v1.2. Read reference/docs/SCALING.md before sizing.
 The reference tree in an upload is generated from this repo, not duplicated in Git.

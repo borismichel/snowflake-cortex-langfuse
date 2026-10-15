@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a pinned CoCo ZIP and text upload from committed, allowlisted files only."""
+"""Build a pinned CoCo text upload and offline ZIP archive from committed files."""
 import argparse
 import hashlib
 import json
