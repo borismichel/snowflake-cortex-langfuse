@@ -3,7 +3,7 @@
 ## 1. Read and inventory — no mutations yet
 
 Read SOURCE.json, reference/VERSION, reference/docs/INSTALL.md (upgrade sections),
-SCALING.md, OPERATIONS.md and STATUS.md. Verify the package version is 1.2.0. Start with
+SCALING.md, OPERATIONS.md and STATUS.md. Verify the package version is 1.2.1. Start with
 read-only discovery; resolve existing names before executing any default-name query.
 If you cannot inspect live objects, give precise read-only queries to the user and
 label the results user-reported. Missing permissions are not proof an object is absent.
@@ -58,6 +58,8 @@ No repeated approval requests for actions already authorised within this scope.
 
 ## 3. Prepare exact upgrade and recovery artifacts
 
+For an already compatible v1.2 installation, the 1.2.1 patch replaces only configured 05b to fix score connection reuse. Preserve limits, routes, schema, tasks, bindings and grants; skip 02d, the limits UPDATE and 07a unless inventory identifies a separate missing component. Suspend/drain and verify fresh score delivery before restoring the agreed task states. The steps below also cover older installations that still need the v1.2 migration.
+
 Keep reference/ unchanged. Produce configured/02d_migration_v12.sql,
 configured/05b_sender.sql and configured/07a_batch_status.sql plus a separate limits
 UPDATE worksheet. Adapt existing namespace, role and warehouse in SQL AND embedded Python.
@@ -94,8 +96,8 @@ Reconcile pre-existing uncertain/partial deliveries where possible. If unresolve
 those rows and document them; they must remain held, never reset to pending or automatically
 replayed. Snapshot counts immediately before the actual schema/code changes.
 
-Apply configured 02d, then 05b, then 07a sequentially, inspecting every statement result.
-Apply the reviewed limits UPDATE without changing routes, frozen project identities or
+For the older-install migration, apply configured 02d, then 05b, then 07a sequentially, inspecting every statement result. For the compatible v1.2 patch, apply only 05b as determined above.
+Only when a limits change was requested, apply the reviewed limits UPDATE without changing routes, frozen project identities or
 publication policy. Existing pending trace deliveries are still per-trace and can be
 packed by the new sender. Accepted deliveries must stay accepted. Failure at a step holds
 dependent work and scheduling; correct the minimum change and retain its diff/query ID.

@@ -25,7 +25,7 @@ The interview resolves named installation settings and a complete destination/ro
 
 ## Current verification
 
-The original V1 was demonstrated with live browser runs. This source revision adds bounded multi-trace batching and routing safeguards; its offline regression suite passes, but a fresh-account installation and live routing acceptance remain to be performed. This package is designed to collect that evidence. An AI-assisted run is not automatically evidence that a human has replayed the manual path.
+The original V1 was demonstrated with live browser runs. This source revision adds bounded multi-trace batching and routing safeguards; its offline regression suite passes. CoCo reported deploying v1.2; independent manual replay and live routing acceptance remain to be performed. This package is designed to collect that evidence. An AI-assisted run is not automatically evidence that a human has replayed the manual path.
 
 No previous account credentials, historical traces, raw screenshots or private project archive are included. Reference README image links are intentionally not bundled; they are not needed for setup. SQL 99_uninstall is included only as destructive recovery reference, never an installation step.
 
@@ -35,3 +35,5 @@ From a clean repository checkout: `python3 tools/build_coco_package.py --output 
 Upload the generated COCO_UPLOAD.txt. The ZIP is only an offline archive; do not upload it to CoCo. This replaces the older unversioned CoCo
 package; do not mix its scripts with v1.2. Read reference/docs/SCALING.md before sizing.
 The reference tree in an upload is generated from this repo, not duplicated in Git.
+
+Deployment evidence update: CoCo reported a v1.2 installation and supplied matching core upgrade files. The 1.2.1 patch includes generic installation fixes and score connection reuse; it has offline checks, with independent live/manual acceptance pending. See reference/docs/STATUS.md.

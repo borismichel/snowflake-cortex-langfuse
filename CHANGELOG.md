@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1 — 19 October 2026
+
+- Port CoCo’s deployment fixes: leave route creation to 03a; create both tasks suspended with COMMENT before AFTER; add explicit 08 activation after canary acceptance. Existing installations retain their task graph and route state.
+- Preserve the HTTP session for individual score sends instead of overwriting it with response status.
+- Document worksheet session boundaries, fresh-install ordering and the separate existing-install update. Regenerate text-only CoCo upload bundles from this revision.
+- Record the supplied v1.2 deployment evidence separately from independent manual, multi-project and load-test acceptance. The 1.2.1 patch is offline validated; its live acceptance remains pending.
+
 ## 1.2.0 — 15 October 2026
 
 Repository version; no GitHub Release is created. Experimental, offline validated; live Snowflake compilation and scale testing pending.

@@ -70,7 +70,7 @@
     "require_billing_verification_before_activation": null
   },
   "unresolved_questions": [],
-  "exporter_version": "1.2.0",
+  "exporter_version": "1.2.1",
   "volume": {
     "traces_per_window": null,
     "window_minutes": null,

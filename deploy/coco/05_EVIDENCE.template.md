@@ -1,7 +1,7 @@
 # New-account deployment evidence
 
 Date/time and timezone:
-Exporter version: 1.2.0
+Exporter version: 1.2.1
 Source commit:
 Execution mode: AI-assisted / human manual replay
 Account context (private; redact before publishing):

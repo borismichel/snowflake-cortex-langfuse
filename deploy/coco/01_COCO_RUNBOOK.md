@@ -61,6 +61,8 @@ execution. Distinguish per-trace delivery rows from multi-trace HTTP envelopes.
 
 Done: configured scripts are reviewable, complete for the selected stage, with no real credentials, no unintended scope and consistent secret bindings across all five network procedures.
 
+Run SET and dependent statements in one Snowflake session. If tool calls do not preserve sessions, use a verified, correctly quoted explicit user identifier for the role grant and retain that executed statement in the receipt.
+
 ## 4. Install in dependency order
 
 Use reference/docs/INSTALL.md as the canonical sequence. Inspect statement results, including procedure-returned JSON, at each boundary. Record SQL query IDs and errors. Stop dependent work on a failure; correct the minimum necessary change and preserve its diff.
@@ -71,7 +73,7 @@ Use reference/docs/INSTALL.md as the canonical sequence. Inspect statement resul
 4. Install configured 04, 05_message_normalizer, 05a, 05b, 05c and 05d in order. Apply selected destination policy fields before staging. Run normalizer fixtures; inspect compilation and return values. Scheduling remains suspended/absent.
 5. Execute the fresh canary procedure in 04_ACCEPTANCE.md. All initial sends must specify a single fresh TRACE_ID. An unfiltered PUBLISH_DESTINATION call or PUBLISH_ALL_DESTINATIONS can publish older routed history.
 6. Apply the user's final route map only after initial validation, with publishing idle. Resolved ROUTED/EXCLUDED traces are frozen; changing routes does not move those historical decisions. Validate final routing with fresh conversations. Do not add blanket exclusion rules during canary setup merely to suppress other agents: EXCLUDED decisions also freeze. Unmatched agents can remain UNROUTED until the final map is applied.
-7. Install configured 07 only for a new task graph, then 07a for its queue view. Its publisher child definition is commented: explicitly extract and create PUBLISH_TASK after the root, with both tasks suspended. Follow the agreed activation choice once required checks pass. Resume child then root. If manual-only, leave both suspended. Verify task history AND delivery results; task success alone is insufficient. Do not run a manual publisher while the graph is active.
+7. Install configured 07 only for a new task graph, then 07a for its queue view. Both tasks are created suspended; verify their dependency. Follow the agreed activation choice once required checks pass. Use configured 08_activate.sql to resume child then root. If manual-only, leave both suspended. Verify task history AND delivery results; task success alone is insufficient. Do not run a manual publisher while the graph is active.
 
 Done: procedures compiled, exact canaries have readback evidence, final scope verified and tasks in the agreed state. For high-volume use, complete the agreed benchmark from reference/docs/SCALING.md before calling capacity accepted. Billing still pending is recorded as pending; use the agreed acceptance criteria to decide whether activation must wait.
 
@@ -85,4 +87,4 @@ For uncertainty/retries, consult reference/docs/OPERATIONS.md and LIMITATIONS.md
 
 Finish with: what runs where; final route table; cadence; checks passed/pending; suspension command; cleanup file and its consequences. Uninstall requires a separate explicit request and does not erase data already sent to Langfuse.
 
-Version check: SOURCE.json and reference/VERSION must agree on 1.2.0. Do not use an older 05b with new deployment assumptions.
+Version check: SOURCE.json and reference/VERSION must agree on 1.2.1. Do not use an older 05b with new deployment assumptions.

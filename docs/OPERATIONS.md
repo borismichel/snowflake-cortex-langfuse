@@ -6,9 +6,7 @@ Use one publisher; do not combine manual publishing with a running task graph.
 ## Scheduled publication
 
 Run `07_tasks_status.sql` only when creating a new graph. It creates the suspended
-root `STAGE_AND_ROUTE_TASK` and health views. Its one-off `EXECUTE TASK` is commented.
-Uncomment and run Part B to create `PUBLISH_TASK` after the root. Verify the dependency
-and resume the child before the root:
+root `STAGE_AND_ROUTE_TASK`, publisher child `PUBLISH_TASK` and health views. Its one-off `EXECUTE TASK` is commented. Verify both tasks and their dependency. After canary acceptance, run `08_activate.sql`, which resumes the child before the root:
 
 ```sql
 USE ROLE LANGFUSE_EXPORTER_ROLE;

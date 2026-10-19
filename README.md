@@ -1,4 +1,4 @@
-# Snowflake Cortex → Langfuse · v1.2
+# Snowflake Cortex → Langfuse · v1.2.1
 
 Export Cortex Agent traces to Langfuse, including runs made in Snowflake’s browser UI. The exporter runs inside Snowflake using SQL, Python stored procedures and scheduled tasks.
 
@@ -20,7 +20,7 @@ Export Cortex Agent traces to Langfuse, including runs made in Snowflake’s bro
 
 I wanted to inspect what happened between a question to a Cortex agent and its answer, even when I ran it directly in Snowsight. This project exports the telemetry Snowflake records so those runs can be inspected in Langfuse alongside other AI applications.
 
-The original V1 was demonstrated with live browser runs. **v1.2 adds bounded multi-trace HTTP batching and routing safeguards tested offline, but not yet compiled or exercised in Snowflake.** Start in a disposable environment. A fresh-account manual installation and live multi-project checks are still outstanding.
+The original V1 was demonstrated with live browser runs. **CoCo reported deploying v1.2; the supplied migration, sender and queue-view files match public source. Version 1.2.1 incorporates installation fixes and score connection reuse, tested offline.** Start in a disposable environment. A fresh-account manual installation and live multi-project checks are still outstanding.
 
 ## What you can inspect
 
@@ -111,7 +111,8 @@ Snowflake documents up to one hour of latency for the usage view, with SQL query
 | --- | --- |
 | Earlier V1 browser traces and root credit scores | Demonstrated during development |
 | v1.2 batching, routing and delivery safeguards | Offline regression suite; see [status](docs/STATUS.md) |
-| Current snapshot compiled/deployed in Snowflake | Not yet verified |
+| v1.2 deployed procedures/function/tasks | CoCo-reported; upgrade source reconciled; views not checked |
+| v1.2.1 patch live acceptance | Not yet verified |
 | Clean manual install in a fresh account | Not yet verified |
 | Live routing across two projects | Not yet verified |
 | 60k–80k traces per window / exporter credit benchmark | Not yet verified |
