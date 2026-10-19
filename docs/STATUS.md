@@ -1,4 +1,22 @@
-# Validation status · v1.2
+# Validation status · v1.2.1
+
+## Deployment evidence
+
+On 15 October, the user supplied CoCo’s deployment receipt and configured SQL. CoCo reported that all running procedures, the function and both tasks matched its files; views were not checked. The supplied 02d migration, v1.2 sender and 07a view were byte-identical to public commit 6d9e3c3. This establishes source reconciliation and reported deployment, not an independent manual replay or live failure/scale acceptance.
+
+Version 1.2.1 ports the generic installation corrections and fixes score HTTP-session reuse. These new changes still require live acceptance. Account/project-specific configuration and private deployment records are not published.
+
+## Deployment corrections carried into 1.2.1
+
+| Supplied deployment change | Canonical source |
+| --- | --- |
+| Remove automatic account-wide route | `sql/02_core_tables.sql`; explicit map remains in 03a |
+| Correct task clause order; create publisher child suspended | `sql/07_tasks_status.sql` |
+| Separate activation, child before root | `sql/08_activate.sql` |
+| CoCo session-variable boundary | `docs/INSTALL.md` and the CoCo installation runbook |
+| Individual score HTTP connection reuse | `sql/05b_sender.sql`, with a regression test |
+
+The supplied initial/final route worksheets and policy/limits UPDATEs were deployment configuration, not portable code fixes. Their agent names, account identifiers and project ID are intentionally omitted. Configure the equivalent initial/final scope in 03a and record chosen policy/limits in the CoCo configuration and generated worksheets. Defaults remain TRACE_FIRST, TOKEN_CREDITS, five-minute span age, 24-hour overdue threshold and the documented v1.2 batch budgets.
 
 ## Implemented
 
@@ -35,7 +53,7 @@ Run from the repository root with Python 3.11 (local checks also run on 3.9):
 python3 -m unittest discover -s tests -v
 ```
 
-41 offline regression tests pass, including the eleven original normalizer fixtures and a
+42 offline regression tests pass, including the eleven original normalizer fixtures and a
 known leading-tag boundary probe. Tests execute the shipped resolver SELECT using SQLite with an ARRAY_AGG adapter,
 and actual embedded Python handlers using mock Snowpark/HTTP interfaces. This checks
 route decision behavior and local failure handling. It is not Snowflake compilation,

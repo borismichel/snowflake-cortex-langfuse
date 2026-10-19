@@ -4,8 +4,7 @@
 
    PREREQUISITES
      - Steps 01, 02, 04 VERIFIED. Run as LANGFUSE_EXPORTER_ROLE.
-     - Part B (publish task) additionally requires step 05b; it stays commented
-       until 05b exists.
+     - Part B (publish task) requires step 05b. Both tasks are created suspended.
 
    CREATES (schema-level, LANGFUSE_EXPORTER.CORE)
      TASK  STAGE_AND_ROUTE_TASK       every 15 min -> CALL STAGE_AND_ROUTE()  (SUSPENDED)
@@ -22,7 +21,7 @@
      Each task run resumes LANGFUSE_EXPORTER_WH (XSMALL, 60 s auto-suspend).
      Every 15 min = up to 96 short runs/day. Lengthen SCHEDULE to reduce cost.
 
-   RE-RUNNABLE: yes. CREATE OR REPLACE TASK recreates the task SUSPENDED.
+   Fresh installation only. Use the upgrade guide for an existing task graph.
    ========================================================================== */
 
 USE ROLE LANGFUSE_EXPORTER_ROLE;
@@ -42,17 +41,15 @@ AS
   CALL LANGFUSE_EXPORTER.CORE.STAGE_AND_ROUTE();
 
 /* ---------------------------------------------------------------------------
-   PART B - publish task (ENABLE ONLY AFTER STEP 05b EXISTS AND CANARY ACCEPTANCE PASSED)
-   Runs after each staging run; one call per enabled destination keeps failures
-   isolated by destination.
-
-   CREATE OR REPLACE TASK LANGFUSE_EXPORTER.CORE.PUBLISH_TASK
-     WAREHOUSE = LANGFUSE_EXPORTER_WH
-     AFTER LANGFUSE_EXPORTER.CORE.STAGE_AND_ROUTE_TASK
-     COMMENT = 'Langfuse exporter: publish READY traces, billing scores'
-   AS
-     CALL LANGFUSE_EXPORTER.CORE.PUBLISH_ALL_DESTINATIONS();   -- defined in 05b
+   PART B - publish task, created after the root. Child tasks are created suspended; activation is in
+   08_activate.sql only.
    ------------------------------------------------------------------------- */
+CREATE OR REPLACE TASK LANGFUSE_EXPORTER.CORE.PUBLISH_TASK
+  WAREHOUSE = LANGFUSE_EXPORTER_WH
+  COMMENT = 'Langfuse exporter: publish READY traces and billing scores'
+  AFTER LANGFUSE_EXPORTER.CORE.STAGE_AND_ROUTE_TASK
+AS
+  CALL LANGFUSE_EXPORTER.CORE.PUBLISH_ALL_DESTINATIONS();
 
 /* ---------------------------------------------------------------------------
    PART C - status views
@@ -108,13 +105,13 @@ SELECT t.*,
 /* =============================================================================
    VERIFICATION (expected results in comments)
    ========================================================================== */
--- V1: expect 1 row, state = suspended, schedule = 15 MINUTE
-SHOW TASKS LIKE 'STAGE_AND_ROUTE_TASK' IN SCHEMA LANGFUSE_EXPORTER.CORE;
--- V2: expect 1 row LANGFUSE_TEST: traces 2, anomaly 2, billing_overdue 0, deliveries all 0
+-- V1: expect both tasks suspended; root schedule = 15 MINUTE.
+SHOW TASKS IN SCHEMA LANGFUSE_EXPORTER.CORE;
+-- V2: inspect per-destination counts; values depend on staged runs.
 SELECT * FROM LANGFUSE_EXPORTER.CORE.EXPORTER_HEALTH_V;
--- V3: expect 0 rows (no deliveries yet)
+-- V3: inspect delivery states, including any canary sends.
 SELECT * FROM LANGFUSE_EXPORTER.CORE.DELIVERY_STATUS_V;
--- V4: expect 0 rows (both TEST traces have billing)
+-- V4: inspect overdue billing; zero rows is not proof of delivery.
 SELECT * FROM LANGFUSE_EXPORTER.CORE.BILLING_OVERDUE_V;
 -- V5: one manual run of the task body works (expect EXECUTE TASK to succeed;
 --     then TASK_HISTORY shows SUCCEEDED within ~1 min). Runs once; does not resume.
@@ -127,7 +124,7 @@ SELECT name, state, scheduled_time, completed_time, error_message
 
 /* =============================================================================
    OPERATIONS
-     Resume (ONLY after canary acceptance is VERIFIED):
+     Resume (ONLY after canary acceptance is VERIFIED; see 08_activate.sql):
        ALTER TASK LANGFUSE_EXPORTER.CORE.PUBLISH_TASK RESUME;          -- child first
        ALTER TASK LANGFUSE_EXPORTER.CORE.STAGE_AND_ROUTE_TASK RESUME;  -- then root
      Pause everything:
@@ -152,4 +149,4 @@ SELECT name, state, scheduled_time, completed_time, error_message
      DROP VIEW IF EXISTS LANGFUSE_EXPORTER.CORE.DELIVERY_STATUS_V;
    ========================================================================== */
 
--- Install 07a_batch_status.sql for the v1.2 queue view (also safe on an existing graph).
+-- Install 07a_batch_status.sql for the bounded HTTP queue view.

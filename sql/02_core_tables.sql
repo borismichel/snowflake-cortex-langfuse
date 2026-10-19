@@ -199,11 +199,8 @@ ON t.destination_id = s.destination_id
 WHEN NOT MATCHED THEN INSERT (destination_id, langfuse_host, project_label, secret_name, integration_name, publication_mode, required_billing)
   VALUES (s.destination_id, s.langfuse_host, s.project_label, s.secret_name, s.integration_name, s.publication_mode, s.required_billing);
 
-MERGE INTO ROUTES t
-USING (SELECT 'ACCOUNT_DEFAULT' route_id, 'ACCOUNT' match_level, 'ROUTE' action, 'LANGFUSE_TEST' destination_id) s
-ON t.route_id = s.route_id
-WHEN NOT MATCHED THEN INSERT (route_id, match_level, action, destination_id, comment)
-  VALUES (s.route_id, s.match_level, s.action, s.destination_id, 'Initial account default');
+-- Routes are configured explicitly by the operator; no account-wide seed.
+-- Routing is owned entirely by 03a_destination_and_routes.sql.
 
 MERGE INTO INGEST_STATE t
 USING (SELECT column1 source FROM VALUES ('AI_OBSERVABILITY_EVENTS'), ('CORTEX_AGENT_USAGE_HISTORY')) s
@@ -217,7 +214,7 @@ WHEN NOT MATCHED THEN INSERT (source) VALUES (s.source);
 SELECT COUNT(*) AS tables_ FROM LANGFUSE_EXPORTER.INFORMATION_SCHEMA.TABLES WHERE table_schema = 'CORE';
 -- V2: expect 1 row LANGFUSE_TEST, TRACE_FIRST, ["TOKEN_CREDITS"]
 SELECT destination_id, langfuse_host, publication_mode, required_billing, enabled FROM DESTINATIONS;
--- V3: expect 1 row ACCOUNT_DEFAULT, ACCOUNT, ROUTE, LANGFUSE_TEST
+-- V3: CONFIGURED expectation: 0 rows (routes are applied by 03a)
 SELECT route_id, match_level, action, destination_id, enabled FROM ROUTES;
 -- V4: expect 2 rows, high_water_ts NULL
 SELECT * FROM INGEST_STATE;

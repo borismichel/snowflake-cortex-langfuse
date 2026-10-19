@@ -4,8 +4,7 @@
 
 This is a custom community project, not an officially supported Langfuse component.
 All Snowflake installation scripts are under `sql/`; the optional package builder is under `tools/`. The original V1 was demonstrated in Snowflake;
-v1.2 adds routing safeguards and bounded multi-trace batching validated offline. Snowflake compilation, live
-multi-project canaries and a fresh-account manual replay are still required.
+CoCo reported a v1.2 deployment and supplied matching upgrade source. The 1.2.1 fixes are offline validated; independent live acceptance, multi-project canaries and a fresh-account manual replay remain required.
 
 ## Choose the mapping
 
@@ -38,6 +37,8 @@ traces. This is resolution-time selection, not an event-time cutover.
 ## Prerequisites and credentials
 
 Follow [prerequisites and network setup](SETUP.md).
+Run SET statements and their dependent statements in the same worksheet/session. CoCo calls may use separate sessions: in that case generate a correctly quoted explicit user identifier for the role grant, verify it, and record the executed SQL. Do not assume a variable from another tool call still exists.
+
 Use ACCOUNTADMIN for account objects, then LANGFUSE_EXPORTER_ROLE with
 LANGFUSE_EXPORTER_WH and LANGFUSE_EXPORTER.CORE for routine setup.
 
@@ -77,10 +78,11 @@ suspended until the canary checks below pass:
    staging calls and account-specific canaries were removed. The normalizer's
    synthetic fixture checks remain.
 5. Deliberately stage and inspect routes, then run fresh disposable canaries below.
-6. Install 07 only when ready to create a new task graph; its one-time EXECUTE TASK
-   is now commented. Part B still requires creating the publisher child task.
-   Follow [task activation](OPERATIONS.md#scheduled-publication), child before root.
-   Install 07a for the v1.2 queue view. Never include 99_uninstall.sql in an installation batch.
+6. Install 07 to create both tasks suspended, then 07a for the queue view. After canary acceptance, run `08_activate.sql` to resume the child before the root; leave it unexecuted for manual-only operation. Never include 99_uninstall.sql in an installation batch.
+
+## Update an existing v1.2 installation to 1.2.1
+
+Suspend the root, wait for active work to finish, save current procedure DDL, then replace only configured `05b_sender.sql`, preserving secret bindings and grants. Verify a fresh credit-score send and its returned HTTP status before restoring the agreed task states. No schema migration or route reset is required. The task syntax fix is already present in the reported CoCo deployment; do not rerun 02, 03a, 07 or 08 merely to apply this patch. Use the existing-install CoCo package for this path.
 
 ## Upgrade an existing exporter to v1.2
 

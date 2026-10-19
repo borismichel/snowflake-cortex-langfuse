@@ -212,11 +212,11 @@ def send_one(session, dest, host, project_id, auth, max_attempts, d_id, http=Non
     if item_type == "TRACE_BATCH":
         headers["x-langfuse-ingestion-version"] = "4"
 
-    http = excerpt = err_class = note = None
+    http_status = excerpt = err_class = note = None
     try:
         r = (http or requests).post(url, data=body.encode("utf-8"), headers=headers, auth=auth,
                           timeout=TIMEOUT, allow_redirects=False)
-        http, excerpt = r.status_code, redact(r.text)[:2000]
+        http_status, excerpt = r.status_code, redact(r.text)[:2000]
         outcome, note = classify_response(item_type, r)
     except requests.exceptions.ConnectTimeout as e:      # connection never established
         outcome, err_class = "RETRYABLE", type(e).__name__
@@ -230,17 +230,17 @@ def send_one(session, dest, host, project_id, auth, max_attempts, d_id, http=Non
 
     q(session, f"UPDATE {DB}.DELIVERY_ATTEMPTS SET finished_at = CURRENT_TIMESTAMP(), state = 'FINISHED', "
                f"http_status = ?, outcome = ?, response_excerpt = ?, error_class = ? WHERE attempt_id = ?",
-      [http, outcome, excerpt, err_class, attempt_id])
+      [http_status, outcome, excerpt, err_class, attempt_id])
     q(session, f"UPDATE {DB}.DELIVERIES SET status = ?, last_http_status = ?, last_error = ?, "
                f"next_attempt_at = IFF(? = 'RETRYABLE', DATEADD(minute, ?, CURRENT_TIMESTAMP()), NULL), "
                f"updated_at = CURRENT_TIMESTAMP() WHERE delivery_id = ? AND claim_id = ?",
-      [outcome, http, last_error, outcome, backoff, d_id, claim])
+      [outcome, http_status, last_error, outcome, backoff, d_id, claim])
     if item_type == "TRACE_BATCH" and outcome in ("ACCEPTED", "PARTIAL"):
         q(session, f"UPDATE {DB}.TRACES SET trace_status = ?, updated_at = CURRENT_TIMESTAMP() "
                    f"WHERE trace_id = ?", ["PUBLISHED" if outcome == "ACCEPTED" else "PARTIAL", trace_id])
-    if http in (401, 403):
-        pause(session, dest, f"authentication failed HTTP {http}")
-    return {"delivery_id": d_id, "item_type": item_type, "outcome": outcome, "http": http, "note": last_error}
+    if http_status in (401, 403):
+        pause(session, dest, f"authentication failed HTTP {http_status}")
+    return {"delivery_id": d_id, "item_type": item_type, "outcome": outcome, "http": http_status, "note": last_error}
 
 
 # v1.2: per-trace frozen deliveries, bounded multi-trace HTTP envelopes.

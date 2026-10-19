@@ -24,3 +24,5 @@ review before that path can be used. No keys belong in this upload or the conver
 
 Files: 01_COCO_RUNBOOK.md, 02_CONFIG.template.json, 03_ACCEPTANCE.md,
 04_EVIDENCE.template.md, reference/, SOURCE.json, SHA256SUMS.
+
+Deployment evidence update: CoCo reported a v1.2 installation and supplied matching core upgrade files. The 1.2.1 patch includes generic installation fixes and score connection reuse; it has offline checks, with independent live/manual acceptance pending. See reference/docs/STATUS.md.
